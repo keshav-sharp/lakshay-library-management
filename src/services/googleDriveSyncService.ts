@@ -7,6 +7,7 @@ import {
   GoogleAuthProvider,
   onAuthStateChanged,
   User,
+  Auth,
 } from 'firebase/auth';
 import firebaseConfig from '../config/firebaseConfig';
 import {
@@ -71,9 +72,22 @@ export interface MasterSyncPayload {
 const GDRIVE_SYNC_CONFIG_KEY = 'lakshay_library_gdrive_sync_config_v1';
 export const PENDING_DRIVE_AUTH_REDIRECT_KEY = 'lakshay_library_pending_drive_redirect';
 
-// Initialize Firebase App safely (reuse if already initialized)
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-const auth = getAuth(app);
+// Lazily initialize Firebase Auth only when valid configuration is present
+let cachedAuthInstance: Auth | null = null;
+
+const getFirebaseAuth = (): Auth | null => {
+  if (cachedAuthInstance) return cachedAuthInstance;
+  if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+    return null;
+  }
+  try {
+    const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    cachedAuthInstance = getAuth(app);
+    return cachedAuthInstance;
+  } catch {
+    return null;
+  }
+};
 
 const provider = new GoogleAuthProvider();
 SCOPES.forEach((scope) => provider.addScope(scope));
@@ -99,6 +113,12 @@ export const initDriveAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
   onAuthFailure?: () => void
 ) => {
+  const auth = getFirebaseAuth();
+  if (!auth) {
+    if (onAuthFailure) onAuthFailure();
+    return () => {};
+  }
+
   if (!redirectResultPromise) {
     redirectResultPromise = getRedirectResult(auth)
       .then((result) => {
@@ -142,6 +162,10 @@ export const googleDriveSignIn = async (): Promise<{
   user: User;
   accessToken: string;
 } | null> => {
+  const auth = getFirebaseAuth();
+  if (!auth) {
+    throw new Error('Firebase Auth is not configured in this build environment.');
+  }
   try {
     isSigningIn = true;
     if (isNativeAndroidWebView()) {
@@ -186,11 +210,15 @@ export const getDriveAccessToken = (): string | null => {
 };
 
 export const getCurrentDriveUser = (): User | null => {
-  return auth.currentUser;
+  const auth = getFirebaseAuth();
+  return auth ? auth.currentUser : null;
 };
 
 export const googleDriveLogout = async (): Promise<void> => {
-  await auth.signOut();
+  const auth = getFirebaseAuth();
+  if (auth) {
+    await auth.signOut();
+  }
   cachedAccessToken = null;
 };
 
