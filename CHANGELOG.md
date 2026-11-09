@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v1.3.1] - 2026-11-09
+
+### Direct APK Download
+- 📦 **[Download `LakshayLibrary-v1.3.1.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 🔗 **[View Release Notes on GitHub (`v1.3.1`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v1.3.1)**
+
+### Fixed
+- **Android App Launcher Icon**: Replaced default Capacitor builder icons with the new deep-teal open-book custom app icon (`public/app-icon.png`) across all Android mipmap launcher densities via automated CI build hooks (`scripts/apply-android-icon.js`).
+
+---
+
 ## [v1.3.0] - 2026-11-09
 
 ### Direct APK Download
