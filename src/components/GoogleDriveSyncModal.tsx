@@ -62,22 +62,6 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
   // Explicit confirmation dialog state before updating/overwriting file in Google Drive
   const [showConfirmPushDialog, setShowConfirmPushDialog] = useState(false);
 
-  useEffect(() => {
-    const unsub = initDriveAuth(
-      (authedUser, token) => {
-        setUser(authedUser);
-        setAccessToken(token);
-        setNeedsAuth(false);
-      },
-      () => {
-        setUser(null);
-        setAccessToken(null);
-        setNeedsAuth(true);
-      }
-    );
-    return () => unsub();
-  }, []);
-
   const refreshDriveFileMetadata = useCallback(async (tokenToUse: string) => {
     setIsCheckingDrive(true);
     setErrorMessage(null);
@@ -96,6 +80,23 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
       setIsCheckingDrive(false);
     }
   }, []);
+
+  useEffect(() => {
+    const unsub = initDriveAuth(
+      (authedUser, token) => {
+        setUser(authedUser);
+        setAccessToken(token);
+        setNeedsAuth(false);
+        refreshDriveFileMetadata(token);
+      },
+      () => {
+        setUser(null);
+        setAccessToken(null);
+        setNeedsAuth(true);
+      }
+    );
+    return () => unsub();
+  }, [refreshDriveFileMetadata]);
 
   useEffect(() => {
     if (isOpen) {

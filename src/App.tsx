@@ -230,6 +230,18 @@ export default function App() {
     };
   }, []);
 
+  // Reopen Google Drive Sync modal automatically when returning from mobile OAuth redirect
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem('lakshay_library_pending_drive_redirect') === '1') {
+        sessionStorage.removeItem('lakshay_library_pending_drive_redirect');
+        setIsGoogleDriveSyncOpen(true);
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
   // Real-time Active Client Presence & Heartbeat Engine
   useEffect(() => {
     const cleanupPresence = initClientPresenceEngine();

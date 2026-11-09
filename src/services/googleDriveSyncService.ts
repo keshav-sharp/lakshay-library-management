@@ -60,6 +60,7 @@ export interface MasterSyncPayload {
 }
 
 const GDRIVE_SYNC_CONFIG_KEY = 'lakshay_library_gdrive_sync_config_v1';
+export const PENDING_DRIVE_AUTH_REDIRECT_KEY = 'lakshay_library_pending_drive_redirect';
 
 // Initialize Firebase App safely (reuse if already initialized)
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
@@ -69,30 +70,51 @@ const provider = new GoogleAuthProvider();
 SCOPES.forEach((scope) => provider.addScope(scope));
 provider.setCustomParameters({ prompt: 'select_account' });
 
+// Detect if running inside an Android APK WebView or Capacitor container
+const isNativeAndroidWebView = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const ua = window.navigator.userAgent || '';
+  const isAndroidWv = /Android/i.test(ua) && /; wv\)/i.test(ua);
+  const hasCapacitor = Boolean(
+    (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.()
+  );
+  return isAndroidWv || hasCapacitor;
+};
+
 // In-memory access token cache (NEVER persisted in localStorage or sessionStorage)
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
+let redirectResultPromise: Promise<User | null> | null = null;
 
 export const initDriveAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
   onAuthFailure?: () => void
 ) => {
-  // Check if returning from a redirect flow on mobile/APK
-  getRedirectResult(auth)
-    .then((result) => {
-      if (result) {
-        const credential = GoogleAuthProvider.credentialFromResult(result);
-        if (credential?.accessToken) {
-          cachedAccessToken = credential.accessToken;
-          if (onAuthSuccess) onAuthSuccess(result.user, cachedAccessToken);
+  if (!redirectResultPromise) {
+    redirectResultPromise = getRedirectResult(auth)
+      .then((result) => {
+        if (result) {
+          const credential = GoogleAuthProvider.credentialFromResult(result);
+          if (credential?.accessToken) {
+            cachedAccessToken = credential.accessToken;
+          }
+          return result.user;
         }
-      }
-    })
-    .catch(() => {
-      // Ignore redirect errors if not returning from redirect
-    });
+        return null;
+      })
+      .catch(() => null);
+  }
+
+  redirectResultPromise.then((redirectUser) => {
+    if (redirectUser && cachedAccessToken) {
+      if (onAuthSuccess) onAuthSuccess(redirectUser, cachedAccessToken);
+    }
+  });
 
   return onAuthStateChanged(auth, async (user: User | null) => {
+    if (redirectResultPromise) {
+      await redirectResultPromise;
+    }
     if (user) {
       if (cachedAccessToken) {
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
@@ -113,6 +135,19 @@ export const googleDriveSignIn = async (): Promise<{
 } | null> => {
   try {
     isSigningIn = true;
+    // In a single-window Android APK WebView, signInWithPopup navigates the main frame
+    // and leaves a blank screen at the end because window.opener is null.
+    // Using signInWithRedirect navigates cleanly back to the app root URL.
+    if (isNativeAndroidWebView()) {
+      try {
+        sessionStorage.setItem(PENDING_DRIVE_AUTH_REDIRECT_KEY, '1');
+      } catch {
+        // Ignore storage errors
+      }
+      await signInWithRedirect(auth, provider);
+      return null;
+    }
+
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
@@ -126,6 +161,11 @@ export const googleDriveSignIn = async (): Promise<{
       code === 'auth/popup-blocked' ||
       code === 'auth/operation-not-supported-in-this-environment'
     ) {
+      try {
+        sessionStorage.setItem(PENDING_DRIVE_AUTH_REDIRECT_KEY, '1');
+      } catch {
+        // Ignore storage errors
+      }
       await signInWithRedirect(auth, provider);
       return null;
     }
