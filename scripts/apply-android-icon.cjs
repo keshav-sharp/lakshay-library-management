@@ -16,7 +16,7 @@ if (!fs.existsSync(resDir)) {
 
 const iconBuffer = fs.readFileSync(iconSource);
 
-// 1. Walk and replace all ic_launcher*.png files
+// 1. Walk and replace all ic_launcher*.png and splash.png files in android/app/src/main/res
 const walkSync = (dir) => {
   let results = [];
   const list = fs.readdirSync(dir);
@@ -26,7 +26,7 @@ const walkSync = (dir) => {
     if (stat && stat.isDirectory()) {
       results = results.concat(walkSync(filePath));
     } else {
-      if (file.includes('ic_launcher') && file.endsWith('.png')) {
+      if ((file.includes('ic_launcher') || file === 'splash.png') && file.endsWith('.png')) {
         results.push(filePath);
       }
     }
@@ -34,14 +34,31 @@ const walkSync = (dir) => {
   return results;
 };
 
-const launcherFiles = walkSync(resDir);
-console.log(`Found ${launcherFiles.length} launcher icon PNG files to replace.`);
-launcherFiles.forEach((file) => {
+const targetPngs = walkSync(resDir);
+console.log(`Found ${targetPngs.length} Android icon/splash PNG files to replace.`);
+targetPngs.forEach((file) => {
   fs.writeFileSync(file, iconBuffer);
   console.log(`Replaced PNG: ${file}`);
 });
 
-// 2. Update ic_launcher_background.xml color to deep teal (#0B192C) matching app icon
+// 2. Remove adaptive-icon XML overrides (mipmap-anydpi-v26 & vector drawables)
+// so Android uses the full custom PNG icon directly in File Manager and Home Screen
+const pathsToRemove = [
+  path.join(resDir, 'mipmap-anydpi-v26/ic_launcher.xml'),
+  path.join(resDir, 'mipmap-anydpi-v26/ic_launcher_round.xml'),
+  path.join(resDir, 'mipmap-anydpi-v26'),
+  path.join(resDir, 'drawable-v24/ic_launcher_foreground.xml'),
+  path.join(resDir, 'drawable/ic_launcher_background.xml'),
+];
+
+pathsToRemove.forEach((p) => {
+  if (fs.existsSync(p)) {
+    fs.rmSync(p, { recursive: true, force: true });
+    console.log(`Removed default vector/adaptive override: ${p}`);
+  }
+});
+
+// 3. Update ic_launcher_background.xml color to deep teal (#0B192C)
 const bgXmlPath = path.join(resDir, 'values/ic_launcher_background.xml');
 if (fs.existsSync(bgXmlPath)) {
   const xmlContent = `<?xml version="1.0" encoding="utf-8"?>

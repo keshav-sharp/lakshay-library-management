@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v1.3.3] - 2026-11-09
+
+### Direct APK Download
+- 📦 **[Download `LakshayLibrary-v1.3.3.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 🔗 **[View Release Notes on GitHub (`v1.3.3`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v1.3.3)**
+
+### Fixed
+- **Android APK File Manager & Home Screen Icon (`capacitor:sync:after` Hook)**: Hooked `scripts/apply-android-icon.cjs` directly into Capacitor's `capacitor:sync:after` and `capacitor:copy:after` lifecycle events so the custom icon is applied *after* `npx cap add android` creates the `android/app/src/main/res` folder in CI, and removed `mipmap-anydpi-v26` adaptive vector overrides so Android displays the full custom icon in both the File Manager and Home Screen.
+
+---
+
 ## [v1.3.2] - 2026-11-09
 
 ### Direct APK Download

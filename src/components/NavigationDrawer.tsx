@@ -21,7 +21,7 @@ import {
   GitBranch,
 } from 'lucide-react';
 
-export const APP_VERSION = 'v1.3.0';
+export const APP_VERSION = 'v1.3.3';
 export const GITHUB_REPO_URL = 'https://github.com/keshav-sharp/lakshay-library-management';
 
 export interface DrawerMenuItem {
