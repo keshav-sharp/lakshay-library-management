@@ -2,12 +2,13 @@
   "appId": "com.example.lakshaylibrary",
   "appName": "Lakshay Library",
   "webDir": "dist",
-  "bundledWebRuntime": false,
   "server": {
+    "hostname": "ais-pre-f5kgqrdu5jro7h3v6vij3e-370499925266.asia-east1.run.app",
     "androidScheme": "https",
     "allowNavigation": [
       "accounts.google.com",
-      "www.googleapis.com"
+      "*.firebaseapp.com",
+      "*.googleapis.com"
     ]
   },
   "android": {
