@@ -101,6 +101,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-standalone-apk:
     runs-on: ubuntu-latest
