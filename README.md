@@ -81,24 +81,39 @@ A production-grade, offline-first library and study hall management system built
 
 ---
 
-## 📱 Building Standalone Android APK
+## 📱 Download or Build Standalone Android APK
 
-To compile this web application into a native standalone Android `.APK`:
+### Option 1: Download Pre-Built APK from GitHub Actions (Easiest)
+You don't need Android Studio or a compiler on your laptop. GitHub Actions automatically builds the APK on every push:
 
-1. Build the production web assets:
+1. Open your GitHub repository and click the **[Actions tab](https://github.com/keshav-sharp/lakshay-library-management/actions)**.
+2. Click on the latest workflow run named **Build Android APK** (or run it manually via **Run workflow**).
+3. Scroll down to the **Artifacts** section at the bottom of the page.
+4. Click **`LakshayLibrary-Android-APK`** to download the `.zip` file.
+5. Extract the ZIP on your phone (or transfer via USB/WhatsApp/Drive) and tap `app-debug.apk` to install!
+
+### Option 2: 1-Click PWA Install (No APK Needed)
+This app is a certified Progressive Web App (PWA):
+1. Open the application URL in **Chrome** on your Android phone.
+2. Tap the in-app **"Install App"** prompt (or tap Chrome's three dots `⋮` → **"Add to Home Screen"** / **"Install app"**).
+3. The app installs immediately with an app icon on your home screen, offline support, and full-screen display.
+
+### Option 3: Compile Locally on Your Laptop
+1. Build the production bundle:
    ```bash
    npm run build
    ```
-2. Initialize Capacitor & Android platform:
+2. Initialize and sync Capacitor Android:
    ```bash
+   npm install @capacitor/core @capacitor/cli @capacitor/android
    npx cap add android
-   npx cap copy android
+   npx cap sync android
    ```
-3. Open in Android Studio or build via CLI:
+3. Open in Android Studio or compile with Gradle:
    ```bash
-   npx cap open android
+   cd android && ./gradlew assembleDebug
    ```
-   Or use the built-in APK Builder script inside the app's **Build Standalone .APK** drawer menu.
+   The compiled APK will be at `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 ---
 
