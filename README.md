@@ -1,13 +1,25 @@
 # Lakshay Library Management App (LibTrack) 📚✨
 
+[![Latest Release](https://img.shields.io/github/v/release/keshav-sharp/lakshay-library-management?color=d97706&label=Latest%20APK%20Release)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest)
+[![Download Android APK](https://img.shields.io/badge/Download-Android%20.APK-16a34a?logo=android&logoColor=white)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![React](https://img.shields.io/badge/React-18+-blue.svg)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-CSS-3.8+-38B2AC.svg)](https://tailwindcss.com/)
 [![PWA Ready](https://img.shields.io/badge/PWA-Ready-success.svg)](https://web.dev/progressive-web-apps/)
-[![Android APK](https://img.shields.io/badge/Android-Jetpack%20Compose-3DDC84.svg)](https://developer.android.com/jetpack/compose)
 
 A production-grade, offline-first library and study hall management system built with React, TypeScript, Tailwind CSS, and Progressive Web App (PWA) capabilities. Designed with native mobile ergonomics, real-time analytics, and dual web/Android APK support.
+
+---
+
+## 📲 Quick Download: Android `.APK` & Version History
+
+| Channel | Direct Link | Description |
+| :--- | :--- | :--- |
+| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v1.1.0)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
+| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0`, `v1.1.0`...)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
+| **GitHub Actions Build Artifacts** | ⚙️ **[Automated CI APK Builds](https://github.com/keshav-sharp/lakshay-library-management/actions/workflows/build-apk.yml)** | Every commit to `main` automatically compiles a fresh `LakshayLibrary-Android-APK` artifact. |
+| **Full Changelog** | 📜 **[View `CHANGELOG.md`](CHANGELOG.md)** | Detailed version-by-version history of features, fixes, and improvements. |
 
 ---
 
@@ -63,7 +75,7 @@ A production-grade, offline-first library and study hall management system built
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/lakshay-library-management.git
+   git clone https://github.com/keshav-sharp/lakshay-library-management.git
    cd lakshay-library-management
    ```
 
@@ -83,22 +95,29 @@ A production-grade, offline-first library and study hall management system built
 
 ## 📱 Download or Build Standalone Android APK
 
-### Option 1: Download Pre-Built APK from GitHub Actions (Easiest)
-You don't need Android Studio or a compiler on your laptop. GitHub Actions automatically builds the APK on every push:
+### Option 1: Direct 1-Click APK Download from GitHub Releases (Recommended)
+Every tagged version of this app includes a pre-compiled `.apk` attached directly to **[GitHub Releases](https://github.com/keshav-sharp/lakshay-library-management/releases)**:
 
-1. Open your GitHub repository and click the **[Actions tab](https://github.com/keshav-sharp/lakshay-library-management/actions)**.
-2. Click on the latest workflow run named **Build Android APK** (or run it manually via **Run workflow**).
-3. Scroll down to the **Artifacts** section at the bottom of the page.
-4. Click **`LakshayLibrary-Android-APK`** to download the `.zip` file.
-5. Extract the ZIP on your phone (or transfer via USB/WhatsApp/Drive) and tap `app-debug.apk` to install!
+- **Direct Latest APK URL**:  
+  👉 **[`https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk`](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- **All Version Releases (`v1.0.0`, `v1.1.0`, etc.)**:  
+  👉 **[`https://github.com/keshav-sharp/lakshay-library-management/releases`](https://github.com/keshav-sharp/lakshay-library-management/releases)**
 
-### Option 2: 1-Click PWA Install (No APK Needed)
+### Option 2: Download from GitHub Actions Build Artifacts
+GitHub Actions also compiles the APK automatically on every push to `main`:
+
+1. Open the **[Actions Workflow Runs](https://github.com/keshav-sharp/lakshay-library-management/actions/workflows/build-apk.yml)**.
+2. Click on the latest green workflow run (**Build Android APK**).
+3. Scroll down to **Artifacts** at the bottom of the page and click **`LakshayLibrary-Android-APK`**.
+4. Extract the `.zip` file and tap `app-debug.apk` to install!
+
+### Option 3: 1-Click PWA Install (No APK Needed)
 This app is a certified Progressive Web App (PWA):
 1. Open the application URL in **Chrome** on your Android phone.
 2. Tap the in-app **"Install App"** prompt (or tap Chrome's three dots `⋮` → **"Add to Home Screen"** / **"Install app"**).
 3. The app installs immediately with an app icon on your home screen, offline support, and full-screen display.
 
-### Option 3: Compile Locally on Your Laptop
+### Option 4: Compile Locally on Your Laptop
 1. Build the production bundle:
    ```bash
    npm run build
