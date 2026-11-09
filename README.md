@@ -12,17 +12,6 @@ A production-grade, offline-first library and study hall management system built
 
 ---
 
-## 📲 Quick Download: Android `.APK` & Version History
-
-| Channel | Direct Link | Description |
-| :--- | :--- | :--- |
-| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v1.3.2)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
-| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v1.3.2`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
-| **GitHub Actions Build Artifacts** | ⚙️ **[Automated CI APK Builds](https://github.com/keshav-sharp/lakshay-library-management/actions/workflows/build-apk.yml)** | Every commit to `main` automatically compiles a fresh `LakshayLibrary-Android-APK` artifact. |
-| **Full Changelog** | 📜 **[View `CHANGELOG.md`](CHANGELOG.md)** | Detailed version-by-version history of features, fixes, and improvements. |
-
----
-
 ## 🌟 Key Features
 
 1. **Comprehensive Student & Seat Directory**:
@@ -41,7 +30,7 @@ A production-grade, offline-first library and study hall management system built
 6. **Active Client Presence & Crash Diagnostics**:
    - Real-time active devices heartbeat tracking and automated crash/error logging synced to `Lakshay_Library_Master/Automated_Logs` on Google Drive.
 7. **Native Mobile Ergonomics & Design**:
-   - Swipe-to-switch gestures between navigation tabs, custom warm-toned empty state illustrations, and a left-sliding Modal Navigation Drawer with embedded GitHub version link (`v1.3.0`).
+   - Swipe-to-switch gestures between navigation tabs, custom warm-toned empty state illustrations, and a left-sliding Modal Navigation Drawer with embedded GitHub version link (`v1.3.2`).
 
 ---
 
@@ -100,7 +89,7 @@ Every tagged version of this app includes a pre-compiled `.apk` attached directl
 
 - **Direct Latest APK URL**:  
   👉 **[`https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk`](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
-- **All Version Releases (`v1.0.0`, `v1.1.0`, etc.)**:  
+- **All Version Releases (`v1.0.0`, `v1.3.2`, etc.)**:  
   👉 **[`https://github.com/keshav-sharp/lakshay-library-management/releases`](https://github.com/keshav-sharp/lakshay-library-management/releases)**
 
 ### Option 2: Download from GitHub Actions Build Artifacts
@@ -133,6 +122,17 @@ This app is a certified Progressive Web App (PWA):
    cd android && ./gradlew assembleDebug
    ```
    The compiled APK will be at `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+---
+
+## 📲 Quick Download: Android `.APK` & Version History
+
+| Channel | Direct Link | Description |
+| :--- | :--- | :--- |
+| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v1.3.2)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
+| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v1.3.2`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
+| **GitHub Actions Build Artifacts** | ⚙️ **[Automated CI APK Builds](https://github.com/keshav-sharp/lakshay-library-management/actions/workflows/build-apk.yml)** | Every commit to `main` automatically compiles a fresh `LakshayLibrary-Android-APK` artifact. |
+| **Full Changelog** | 📜 **[View `CHANGELOG.md`](CHANGELOG.md)** | Detailed version-by-version history of features, fixes, and improvements. |
 
 ---
 
