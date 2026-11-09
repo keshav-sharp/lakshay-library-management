@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v1.3.2] - 2026-11-09
+
+### Direct APK Download
+- 📦 **[Download `LakshayLibrary-v1.3.2.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 🔗 **[View Release Notes on GitHub (`v1.3.2`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v1.3.2)**
+
+### Fixed
+- **Android App Launcher Icon & Background**: Overwrote all `ic_launcher*.png` assets across all mipmap densities with `public/app-icon.png` and updated `ic_launcher_background.xml` to deep teal (`#0B192C`) to eliminate default white/blue capacitor icon backgrounds.
+
+---
+
 ## [v1.3.1] - 2026-11-09
 
 ### Direct APK Download
