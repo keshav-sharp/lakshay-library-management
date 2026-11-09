@@ -1,0 +1,13 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+.aistudio/
+public/assets/aistudio/
+metadata.json
+firebase-applet-config.json
+firebase-applet-config.xml

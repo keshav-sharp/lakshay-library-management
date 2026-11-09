@@ -1,0 +1,32 @@
+{
+  "id": "/",
+  "name": "Lakshay Library Management App",
+  "short_name": "LakshayLib",
+  "description": "Android Jetpack Compose & Cloud Firestore library management app for student fee tracking, WhatsApp reminders, payment history sub-collections, and WorkManager alerts.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#090d16",
+  "theme_color": "#d97706",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

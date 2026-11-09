@@ -1,0 +1,318 @@
+@import "tailwindcss";
+
+/*
+ * Dynamic MaterialTheme.colorScheme.onSurface Input Text Color Rules
+ * Light Mode (Default): Dark/black text (#0f172a) on light surface
+ * Dark Mode (.lakshay-dark-mode): White/light text (#f8fafc) on dark surface
+ */
+input,
+select,
+textarea {
+  color: #0f172a;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #64748b;
+}
+
+/* Warm Sunset Amber & Slate — Global SaaS Dark Mode Variant */
+.lakshay-dark-mode {
+  color-scheme: dark;
+  color: #f1f5f9;
+}
+
+/* Only apply background overrides to elements that actually declare a surface background */
+.lakshay-dark-mode.bg-slate-50,
+.lakshay-dark-mode .bg-slate-50,
+.lakshay-dark-mode .bg-\[\#f8fafc\] {
+  background-color: #090d16 !important;
+}
+
+.lakshay-dark-mode.bg-white,
+.lakshay-dark-mode .bg-white,
+.lakshay-dark-mode .bg-white\/95,
+.lakshay-dark-mode .bg-white\/90,
+.lakshay-dark-mode .bg-white\/85,
+.lakshay-dark-mode .bg-white\/80 {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+.lakshay-dark-mode .bg-slate-100,
+.lakshay-dark-mode .bg-slate-100\/90,
+.lakshay-dark-mode .bg-slate-100\/80,
+.lakshay-dark-mode .bg-slate-100\/70,
+.lakshay-dark-mode .bg-slate-100\/60,
+.lakshay-dark-mode .bg-slate-200\/70,
+.lakshay-dark-mode .bg-slate-200\/60,
+.lakshay-dark-mode .bg-slate-50\/90,
+.lakshay-dark-mode .bg-slate-50\/80,
+.lakshay-dark-mode .bg-slate-50\/70,
+.lakshay-dark-mode .bg-slate-50\/60 {
+  background-color: #0f172a !important;
+  color: #e2e8f0 !important;
+}
+
+.lakshay-dark-mode .from-slate-50 {
+  --tw-gradient-from: #0f172a !important;
+  --tw-gradient-to: rgba(245, 158, 11, 0.1) !important;
+}
+
+/* Translucent 1px Dark Mode Borders (border-slate-800/60 equivalent) */
+.lakshay-dark-mode .border-slate-100,
+.lakshay-dark-mode .border-slate-200,
+.lakshay-dark-mode .border-slate-200\/60,
+.lakshay-dark-mode .border-slate-200\/70,
+.lakshay-dark-mode .border-slate-200\/80,
+.lakshay-dark-mode .border-slate-200\/90,
+.lakshay-dark-mode .border-slate-300 {
+  border-color: rgba(51, 65, 85, 0.6) !important;
+}
+
+.lakshay-dark-mode .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+.lakshay-dark-mode .divide-slate-200\/60 > :not([hidden]) ~ :not([hidden]),
+.lakshay-dark-mode .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(51, 65, 85, 0.6) !important;
+}
+
+.lakshay-dark-mode .text-slate-900,
+.lakshay-dark-mode .text-slate-800 {
+  color: #f8fafc !important;
+}
+
+.lakshay-dark-mode .text-slate-700,
+.lakshay-dark-mode .text-slate-600 {
+  color: #cbd5e1 !important;
+}
+
+.lakshay-dark-mode .text-slate-500,
+.lakshay-dark-mode .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+.lakshay-dark-mode .bg-amber-50,
+.lakshay-dark-mode .bg-amber-50\/90,
+.lakshay-dark-mode .bg-amber-50\/80,
+.lakshay-dark-mode .bg-amber-50\/70,
+.lakshay-dark-mode .bg-amber-50\/60,
+.lakshay-dark-mode .bg-amber-50\/50 {
+  background-color: rgba(245, 158, 11, 0.14) !important;
+  color: #fde68a !important;
+}
+
+.lakshay-dark-mode .bg-amber-100,
+.lakshay-dark-mode .bg-amber-100\/90 {
+  background-color: rgba(245, 158, 11, 0.22) !important;
+  color: #fef3c7 !important;
+}
+
+.lakshay-dark-mode .text-amber-950,
+.lakshay-dark-mode .text-amber-900,
+.lakshay-dark-mode .text-amber-800,
+.lakshay-dark-mode .text-amber-700 {
+  color: #fbbf24 !important;
+}
+
+.lakshay-dark-mode .border-amber-100,
+.lakshay-dark-mode .border-amber-200,
+.lakshay-dark-mode .border-amber-200\/60,
+.lakshay-dark-mode .border-amber-200\/70,
+.lakshay-dark-mode .border-amber-300,
+.lakshay-dark-mode .border-amber-300\/70 {
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
+.lakshay-dark-mode .bg-rose-50,
+.lakshay-dark-mode .bg-rose-50\/70,
+.lakshay-dark-mode .bg-rose-50\/60 {
+  background-color: rgba(225, 29, 72, 0.15) !important;
+}
+
+.lakshay-dark-mode .text-rose-800,
+.lakshay-dark-mode .text-rose-700 {
+  color: #fda4af !important;
+}
+
+.lakshay-dark-mode .bg-emerald-50,
+.lakshay-dark-mode .bg-emerald-50\/80,
+.lakshay-dark-mode .bg-emerald-50\/60,
+.lakshay-dark-mode .bg-emerald-50\/40 {
+  background-color: rgba(16, 185, 129, 0.15) !important;
+}
+
+.lakshay-dark-mode .text-emerald-800,
+.lakshay-dark-mode .text-emerald-700 {
+  color: #6ee7b7 !important;
+}
+
+.lakshay-dark-mode input,
+.lakshay-dark-mode select,
+.lakshay-dark-mode textarea {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  border-color: rgba(51, 65, 85, 0.75) !important;
+}
+
+.lakshay-dark-mode input::placeholder,
+.lakshay-dark-mode textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Hide scrollbars cleanly for horizontal pill bars */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Subtle SaaS Shimmer Loading Skeleton Effect (Light & Dark Modes) */
+@keyframes lakshay-shimmer-sweep {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.lakshay-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(226, 232, 240, 0.65) 0%,
+    rgba(241, 245, 249, 0.95) 35%,
+    rgba(254, 243, 199, 0.55) 50%,
+    rgba(241, 245, 249, 0.95) 65%,
+    rgba(226, 232, 240, 0.65) 100%
+  );
+  background-size: 200% 100%;
+  animation: lakshay-shimmer-sweep 1.75s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.lakshay-dark-mode .lakshay-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(30, 41, 59, 0.85) 0%,
+    rgba(51, 65, 85, 0.75) 35%,
+    rgba(245, 158, 11, 0.14) 50%,
+    rgba(51, 65, 85, 0.75) 65%,
+    rgba(30, 41, 59, 0.85) 100%
+  );
+  background-size: 200% 100%;
+  animation: lakshay-shimmer-sweep 1.75s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Official "Sign in with Google" Button Styling (.gsi-material-button) */
+.gsi-material-button {
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  -webkit-appearance: none;
+  background-color: #ffffff;
+  background-image: none;
+  border: 1px solid #747775;
+  border-radius: 20px;
+  box-sizing: border-box;
+  color: #1f1f1f;
+  cursor: pointer;
+  font-family: 'Roboto', arial, sans-serif;
+  font-size: 14px;
+  height: 40px;
+  letter-spacing: 0.25px;
+  outline: none;
+  overflow: hidden;
+  padding: 0 16px;
+  position: relative;
+  text-align: center;
+  transition: background-color 0.218s, border-color 0.218s, box-shadow 0.218s;
+  vertical-align: middle;
+  white-space: nowrap;
+  width: auto;
+  max-width: 400px;
+  min-width: min-content;
+}
+
+.lakshay-dark-mode .gsi-material-button {
+  background-color: #131314;
+  border-color: #8e918f;
+  color: #e3e3e3;
+}
+
+.gsi-material-button .gsi-material-button-icon {
+  height: 20px;
+  margin-right: 10px;
+  min-width: 20px;
+  width: 20px;
+}
+
+.gsi-material-button .gsi-material-button-content-wrapper {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  height: 100%;
+  justify-content: space-between;
+  position: relative;
+  width: 100%;
+}
+
+.gsi-material-button .gsi-material-button-contents {
+  flex-grow: 1;
+  font-family: 'Roboto', arial, sans-serif;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
+.gsi-material-button .gsi-material-button-state {
+  transition: opacity 0.218s;
+  bottom: 0;
+  left: 0;
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.gsi-material-button:hover {
+  box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+}
+
+/* Subtle Directional Tab Slide Animation (Enhances navigation tab switching) */
+@keyframes tab-slide-in-right {
+  0% {
+    opacity: 0;
+    transform: translate3d(16px, 0, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes tab-slide-in-left {
+  0% {
+    opacity: 0;
+    transform: translate3d(-16px, 0, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-tab-slide-right {
+  animation: tab-slide-in-right 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+.animate-tab-slide-left {
+  animation: tab-slide-in-left 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+
+
