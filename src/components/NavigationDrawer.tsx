@@ -7,7 +7,6 @@ import {
   Scan,
   Clock,
   Armchair,
-  BookOpen,
   X,
   ChevronRight,
   Check,
@@ -16,10 +15,14 @@ import {
   RotateCcw,
   Trash2,
   QrCode,
-  PackageCheck,
   Bell,
   Cloud,
+  ExternalLink,
+  GitBranch,
 } from 'lucide-react';
+
+export const APP_VERSION = 'v1.3.0';
+export const GITHUB_REPO_URL = 'https://github.com/keshav-sharp/lakshay-library-management';
 
 export interface DrawerMenuItem {
   id: string;
@@ -64,7 +67,6 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
   onResetDatabase,
   onRestorePreviousData,
   onOpenUpiPaymentQr,
-  onOpenApkExport,
   onOpenWorkManager,
   onOpenGoogleDriveSync,
 }) => {
@@ -78,7 +80,6 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
     onClose();
   };
 
-  // The 5 secondary features moved into ModalNavigationDrawer
   const drawerItems: DrawerMenuItem[] = [
     {
       id: 'settings',
@@ -132,7 +133,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
     {
       id: 'diagnostics_logs',
       label: 'Diagnostics & Active Clients',
-      subtitle: 'Crash logs & active devices on Google Drive',
+      subtitle: 'Lakshay_Library_Master/Automated_Logs on Drive',
       icon: Activity,
       onClick: () => {
         handleCloseDrawer();
@@ -150,16 +151,6 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
       },
     },
     {
-      id: 'build_apk',
-      label: 'Build Standalone .APK',
-      subtitle: 'Laptop CLI, Android Studio & GitHub APK builder',
-      icon: PackageCheck,
-      onClick: () => {
-        handleCloseDrawer();
-        if (onOpenApkExport) onOpenApkExport();
-      },
-    },
-    {
       id: 'work_manager',
       label: 'Android WorkManager Tasks',
       subtitle: 'Daily JSON backup & twice-daily alerts',
@@ -172,7 +163,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
     {
       id: 'gdrive_sync',
       label: 'Google Drive Daily Sync & Role',
-      subtitle: 'Primary writer / Secondary follower conflict prevention',
+      subtitle: 'Lakshay_Library_Master/Master_Sync_Backups',
       icon: Cloud,
       onClick: () => {
         handleCloseDrawer();
@@ -248,7 +239,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
             Library Tools &amp; Configuration
           </span>
-          <span className="text-[10px] font-mono text-slate-400">6 items</span>
+          <span className="text-[10px] font-mono text-slate-400">{drawerItems.length} items</span>
         </div>
 
         {/* NavigationDrawerItem List */}
@@ -332,17 +323,46 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
               </div>
             );
           })}
+
+          {/* Last Item in Navigation Drawer: App Version with embedded Git Repository URL */}
+          <div className="pt-2 mt-2 border-t border-slate-200/60">
+            <a
+              href={GITHUB_REPO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full px-3.5 py-3 rounded-2xl text-left flex items-center justify-between gap-3 hover:bg-amber-500/10 active:bg-amber-500/20 transition-all group border border-transparent hover:border-amber-500/30"
+              title="Open GitHub Repository & APK Releases"
+            >
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-600 flex items-center justify-center shrink-0">
+                  <GitBranch className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                    <span>App Version</span>
+                    <span className="font-mono text-amber-600 underline decoration-amber-500/50 underline-offset-2">
+                      {APP_VERSION}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                    GitHub Repository &amp; APK Releases
+                  </div>
+                </div>
+              </div>
+              <ExternalLink className="w-4 h-4 text-amber-600 shrink-0" />
+            </a>
+          </div>
         </div>
 
-        {/* Drawer Footer with Jetpack Compose Code Inspector Link */}
-        <div className="p-3.5 border-t border-slate-200/60 bg-slate-50/80 shrink-0">
+        {/* Drawer Footer with Jetpack Compose Code Inspector & Embedded Version Link */}
+        <div className="p-3.5 border-t border-slate-200/60 bg-slate-50/80 shrink-0 space-y-2">
           <button
             type="button"
             onClick={() => {
               handleCloseDrawer();
               onViewKotlinDrawerCode();
             }}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center justify-between transition-colors shadow-xs"
+            className="w-full px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center justify-between transition-colors shadow-xs"
           >
             <span className="flex items-center gap-2">
               <Code2 className="w-4 h-4 text-amber-400" />
@@ -350,6 +370,20 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
             </span>
             <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
           </button>
+
+          <div className="flex items-center justify-between px-1 text-[11px] text-slate-500">
+            <span>Lakshay Library (LibTrack)</span>
+            <a
+              href={GITHUB_REPO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono font-bold text-amber-600 hover:text-amber-500 underline underline-offset-2 inline-flex items-center gap-1 transition-colors"
+              title="Open GitHub Repository (keshav-sharp/lakshay-library-management)"
+            >
+              <span>{APP_VERSION}</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
         </div>
       </aside>
     </div>

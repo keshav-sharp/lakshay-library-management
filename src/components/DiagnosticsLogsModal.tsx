@@ -379,7 +379,7 @@ export const DiagnosticsLogsModal: React.FC<DiagnosticsLogsModalProps> = ({
                   <span className="font-bold text-slate-800">Multi-Device Cloud Telemetry:</span>
                   <p className="leading-relaxed">
                     When your devices connect to Google Drive, their heartbeats are automatically
-                    merged into <code className="font-mono text-amber-700">Lakshay_Library_Logs/{ACTIVE_CLIENTS_FILENAME}</code> so you can see your phone and laptop active statuses from anywhere.
+                    merged into <code className="font-mono text-amber-700">{LOGS_FOLDER_NAME}/{ACTIVE_CLIENTS_FILENAME}</code> so you can see your phone and laptop active statuses from anywhere.
                   </p>
                 </div>
               </div>

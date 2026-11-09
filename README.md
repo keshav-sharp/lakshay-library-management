@@ -16,8 +16,8 @@ A production-grade, offline-first library and study hall management system built
 
 | Channel | Direct Link | Description |
 | :--- | :--- | :--- |
-| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v1.2.0)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
-| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v1.2.0`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
+| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v1.3.0)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
+| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v1.3.0`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
 | **GitHub Actions Build Artifacts** | ⚙️ **[Automated CI APK Builds](https://github.com/keshav-sharp/lakshay-library-management/actions/workflows/build-apk.yml)** | Every commit to `main` automatically compiles a fresh `LakshayLibrary-Android-APK` artifact. |
 | **Full Changelog** | 📜 **[View `CHANGELOG.md`](CHANGELOG.md)** | Detailed version-by-version history of features, fixes, and improvements. |
 
@@ -34,14 +34,14 @@ A production-grade, offline-first library and study hall management system built
    - Easily attach library UPI ID and payment QR code standees with mandatory warning confirmation dialogs upon editing.
 4. **Android WorkManager Background Tasks (Twice Daily)**:
    - Automated periodic worker simulations for daily JSON database backups and **twice-daily** (Morning & Evening) fee due date and overdue status notifications.
-5. **Google Drive Conflict-Free Multi-Device Sync**:
-   - Primary writer / secondary follower roles ensuring conflict-free database synchronization across multiple tablets and phones.
+5. **Google Drive Organized Master Folder & Conflict-Free Sync (`Lakshay_Library_Master`)**:
+   - Automatically creates a structured `Lakshay_Library_Master` root folder in Google Drive with dedicated subfolders:
+     - `Lakshay_Library_Master/Master_Sync_Backups/` for primary writer / secondary follower daily database snapshots (`Lakshay_Library_Master_Sync.json`).
+     - `Lakshay_Library_Master/Automated_Logs/` for real-time active client presence (`active_clients_status.json`) and automated crash diagnostics (`crash_and_error_logs.json`).
 6. **Active Client Presence & Crash Diagnostics**:
-   - Real-time active devices heartbeat tracking and automated crash/error logging synced to `Lakshay_Library_Logs` on Google Drive.
+   - Real-time active devices heartbeat tracking and automated crash/error logging synced to `Lakshay_Library_Master/Automated_Logs` on Google Drive.
 7. **Native Mobile Ergonomics & Design**:
-   - Swipe-to-switch gestures between navigation tabs, custom warm-toned empty state illustrations, and a left-sliding Modal Navigation Drawer.
-8. **Standalone Android .APK Generator**:
-   - Built-in companion code viewer and builder scripts for compiling a 100% standalone offline Android APK using Capacitor or Jetpack Compose.
+   - Swipe-to-switch gestures between navigation tabs, custom warm-toned empty state illustrations, and a left-sliding Modal Navigation Drawer with embedded GitHub version link (`v1.3.0`).
 
 ---
 

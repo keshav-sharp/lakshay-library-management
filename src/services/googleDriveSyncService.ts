@@ -20,7 +20,12 @@ import { getStoredSeats, saveStoredSeats } from './seatService';
 
 export const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
 
+// Hierarchical Master Folder & Subfolder Architecture on Google Drive
+export const MASTER_DRIVE_ROOT_FOLDER_NAME = 'Lakshay_Library_Master';
+export const MASTER_SYNC_SUBFOLDER_NAME = 'Master_Sync_Backups';
+export const AUTOMATED_LOGS_SUBFOLDER_NAME = 'Automated_Logs';
 export const MASTER_DRIVE_BACKUP_FILENAME = 'Lakshay_Library_Master_Sync.json';
+export const MASTER_DRIVE_SYNC_PATH = `${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME}/${MASTER_DRIVE_BACKUP_FILENAME}`;
 
 export type DeviceSyncRole = 'PRIMARY' | 'SECONDARY';
 
@@ -34,6 +39,8 @@ export interface GoogleDriveSyncConfig {
   lastDriveFileId: string | null;
   lastPrimaryWriterName: string | null;
   lastSyncedStudentCount: number | null;
+  masterRootFolderId?: string | null;
+  masterSyncSubfolderId?: string | null;
 }
 
 export interface DriveBackupFileMetadata {
@@ -41,6 +48,7 @@ export interface DriveBackupFileMetadata {
   name: string;
   modifiedTime: string;
   size?: string;
+  folderPath?: string;
 }
 
 export interface MasterSyncPayload {
@@ -50,6 +58,7 @@ export interface MasterSyncPayload {
   syncDateKey: string;
   primaryDeviceId: string;
   primaryDeviceName: string;
+  folderPath: string;
   data: {
     students: ReturnType<typeof getStoredStudents>;
     payments: ReturnType<typeof getStoredPayments>;
@@ -135,9 +144,6 @@ export const googleDriveSignIn = async (): Promise<{
 } | null> => {
   try {
     isSigningIn = true;
-    // In a single-window Android APK WebView, signInWithPopup navigates the main frame
-    // and leaves a blank screen at the end because window.opener is null.
-    // Using signInWithRedirect navigates cleanly back to the app root URL.
     if (isNativeAndroidWebView()) {
       try {
         sessionStorage.setItem(PENDING_DRIVE_AUTH_REDIRECT_KEY, '1');
@@ -202,6 +208,8 @@ export const getGoogleDriveSyncConfig = (): GoogleDriveSyncConfig => {
         lastDriveFileId: null,
         lastPrimaryWriterName: null,
         lastSyncedStudentCount: null,
+        masterRootFolderId: null,
+        masterSyncSubfolderId: null,
       };
       localStorage.setItem(GDRIVE_SYNC_CONFIG_KEY, JSON.stringify(defaultConfig));
       return defaultConfig;
@@ -218,6 +226,8 @@ export const getGoogleDriveSyncConfig = (): GoogleDriveSyncConfig => {
       lastDriveFileId: null,
       lastPrimaryWriterName: null,
       lastSyncedStudentCount: null,
+      masterRootFolderId: null,
+      masterSyncSubfolderId: null,
     };
   }
 };
@@ -231,17 +241,143 @@ export const saveGoogleDriveSyncConfig = (config: GoogleDriveSyncConfig): void =
 };
 
 /**
- * Searches Google Drive for the canonical `Lakshay_Library_Master_Sync.json` file.
+ * Helper: Ensures a specific folder exists in Google Drive (optionally inside a parent folder).
+ */
+export const ensureDriveFolderExists = async (
+  accessToken: string,
+  folderName: string,
+  parentFolderId?: string | null,
+  cachedFolderId?: string | null,
+  description?: string
+): Promise<string> => {
+  // 1. Verify cachedFolderId if available
+  if (cachedFolderId) {
+    try {
+      const checkRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${cachedFolderId}?fields=id,name,trashed`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      );
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        if (!checkData.trashed) {
+          return cachedFolderId;
+        }
+      }
+    } catch {
+      // Fall through to search
+    }
+  }
+
+  // 2. Search for folder by name (and parent if specified)
+  const parentClause = parentFolderId ? ` and '${parentFolderId}' in parents` : '';
+  const query = encodeURIComponent(
+    `name = '${folderName}' and mimeType = 'application/vnd.google-apps.folder'${parentClause} and trashed = false`
+  );
+  const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${query}&spaces=drive&fields=files(id,name)&pageSize=1`;
+
+  const searchRes = await fetch(searchUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!searchRes.ok) {
+    if (searchRes.status === 401 || searchRes.status === 403) {
+      cachedAccessToken = null;
+      throw new Error('AUTH_REQUIRED');
+    }
+    throw new Error(`Google Drive folder lookup failed (${searchRes.status})`);
+  }
+
+  const searchData = await searchRes.json();
+  if (searchData.files && searchData.files.length > 0) {
+    return searchData.files[0].id as string;
+  }
+
+  // 3. Create the folder if it doesn't exist yet
+  const createPayload: Record<string, unknown> = {
+    name: folderName,
+    mimeType: 'application/vnd.google-apps.folder',
+    description: description || `Lakshay Library folder: ${folderName}`,
+  };
+  if (parentFolderId) {
+    createPayload.parents = [parentFolderId];
+  }
+
+  const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(createPayload),
+  });
+
+  if (!createRes.ok) {
+    if (createRes.status === 401 || createRes.status === 403) {
+      cachedAccessToken = null;
+      throw new Error('AUTH_REQUIRED');
+    }
+    throw new Error(`Failed to create folder '${folderName}' on Google Drive (${createRes.status})`);
+  }
+
+  const createdData = await createRes.json();
+  return createdData.id as string;
+};
+
+/**
+ * Ensures the root Master Folder (`Lakshay_Library_Master`) and the `Master_Sync_Backups` subfolder exist.
+ */
+export const ensureMasterSyncFolderHierarchy = async (
+  accessToken: string
+): Promise<{ rootFolderId: string; syncSubfolderId: string }> => {
+  const config = getGoogleDriveSyncConfig();
+
+  const rootFolderId = await ensureDriveFolderExists(
+    accessToken,
+    MASTER_DRIVE_ROOT_FOLDER_NAME,
+    null,
+    config.masterRootFolderId,
+    'Lakshay Library Master Cloud Directory (Contains Master Sync Backups and Automated Logs)'
+  );
+
+  const syncSubfolderId = await ensureDriveFolderExists(
+    accessToken,
+    MASTER_SYNC_SUBFOLDER_NAME,
+    rootFolderId,
+    config.masterSyncSubfolderId,
+    'Lakshay Library Master Database Sync Subfolder'
+  );
+
+  if (
+    config.masterRootFolderId !== rootFolderId ||
+    config.masterSyncSubfolderId !== syncSubfolderId
+  ) {
+    saveGoogleDriveSyncConfig({
+      ...config,
+      masterRootFolderId: rootFolderId,
+      masterSyncSubfolderId: syncSubfolderId,
+    });
+  }
+
+  return { rootFolderId, syncSubfolderId };
+};
+
+/**
+ * Searches Google Drive inside `Lakshay_Library_Master/Master_Sync_Backups/` for `Lakshay_Library_Master_Sync.json`.
  */
 export const findMasterSyncFileOnDrive = async (
   accessToken: string
 ): Promise<DriveBackupFileMetadata | null> => {
-  const query = encodeURIComponent(
-    `name = '${MASTER_DRIVE_BACKUP_FILENAME}' and trashed = false`
-  );
-  const url = `https://www.googleapis.com/drive/v3/files?q=${query}&spaces=drive&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc&pageSize=1`;
+  const { syncSubfolderId } = await ensureMasterSyncFolderHierarchy(accessToken);
 
-  const response = await fetch(url, {
+  // 1. Search inside the dedicated `Master_Sync_Backups` subfolder first
+  const subfolderQuery = encodeURIComponent(
+    `name = '${MASTER_DRIVE_BACKUP_FILENAME}' and '${syncSubfolderId}' in parents and trashed = false`
+  );
+  const subfolderUrl = `https://www.googleapis.com/drive/v3/files?q=${subfolderQuery}&spaces=drive&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc&pageSize=1`;
+
+  const response = await fetch(subfolderUrl, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
@@ -257,14 +393,18 @@ export const findMasterSyncFileOnDrive = async (
 
   const data = await response.json();
   if (data.files && data.files.length > 0) {
-    return data.files[0] as DriveBackupFileMetadata;
+    return {
+      ...(data.files[0] as DriveBackupFileMetadata),
+      folderPath: `${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME}`,
+    };
   }
+
   return null;
 };
 
 /**
- * PRIMARY DEVICE ONLY: Uploads or updates `Lakshay_Library_Master_Sync.json` in Google Drive.
- * Secondary devices are blocked from writing to prevent multi-device conflict.
+ * PRIMARY DEVICE ONLY: Uploads or updates `Lakshay_Library_Master_Sync.json` inside
+ * `Lakshay_Library_Master/Master_Sync_Backups/` on Google Drive.
  */
 export const pushPrimarySnapshotToGoogleDrive = async (
   accessToken: string,
@@ -273,6 +413,7 @@ export const pushPrimarySnapshotToGoogleDrive = async (
   fileId: string;
   syncedAt: string;
   studentCount: number;
+  folderPath: string;
 }> => {
   const config = getGoogleDriveSyncConfig();
   if (config.deviceRole !== 'PRIMARY') {
@@ -280,6 +421,8 @@ export const pushPrimarySnapshotToGoogleDrive = async (
       'Conflict Guard: Only a device set to PRIMARY mode can upload master data to Google Drive.'
     );
   }
+
+  const { syncSubfolderId } = await ensureMasterSyncFolderHierarchy(accessToken);
 
   const now = new Date();
   const dateKey = now.toISOString().split('T')[0];
@@ -289,13 +432,16 @@ export const pushPrimarySnapshotToGoogleDrive = async (
   const shifts = getStoredShifts();
   const seats = getStoredSeats();
 
+  const folderPath = `${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME}`;
+
   const payload: MasterSyncPayload = {
-    schemaVersion: '1.0',
+    schemaVersion: '1.3',
     application: 'Lakshay Library Management App (LibTrack)',
     syncedAt: now.toISOString(),
     syncDateKey: dateKey,
     primaryDeviceId: config.deviceId,
     primaryDeviceName: config.deviceName,
+    folderPath,
     data: {
       students,
       payments,
@@ -305,7 +451,7 @@ export const pushPrimarySnapshotToGoogleDrive = async (
     },
   };
 
-  // Check if file already exists if existingFileId wasn't passed
+  // Check if file already exists inside the `Master_Sync_Backups` subfolder
   let targetFileId = existingFileId;
   if (!targetFileId) {
     const found = await findMasterSyncFileOnDrive(accessToken);
@@ -314,11 +460,18 @@ export const pushPrimarySnapshotToGoogleDrive = async (
     }
   }
 
-  const metadata = {
-    name: MASTER_DRIVE_BACKUP_FILENAME,
-    mimeType: 'application/json',
-    description: `Lakshay Library Master Daily Sync from Primary Device (${config.deviceName}) on ${dateKey}`,
-  };
+  const metadata = targetFileId
+    ? {
+        name: MASTER_DRIVE_BACKUP_FILENAME,
+        mimeType: 'application/json',
+        description: `Lakshay Library Master Daily Sync in ${folderPath} from Primary Device (${config.deviceName}) on ${dateKey}`,
+      }
+    : {
+        name: MASTER_DRIVE_BACKUP_FILENAME,
+        mimeType: 'application/json',
+        parents: [syncSubfolderId],
+        description: `Lakshay Library Master Daily Sync in ${folderPath} from Primary Device (${config.deviceName}) on ${dateKey}`,
+      };
 
   const boundary = '-------lakshay_library_drive_sync_boundary';
   const delimiter = `\r\n--${boundary}\r\n`;
@@ -359,12 +512,13 @@ export const pushPrimarySnapshotToGoogleDrive = async (
   const resultData = await res.json();
   const savedFileId = resultData.id || targetFileId || '';
 
+  const latestConfig = getGoogleDriveSyncConfig();
   saveGoogleDriveSyncConfig({
-    ...config,
+    ...latestConfig,
     lastSyncedDateKey: dateKey,
     lastSyncedAtISO: now.toISOString(),
     lastDriveFileId: savedFileId,
-    lastPrimaryWriterName: config.deviceName,
+    lastPrimaryWriterName: latestConfig.deviceName,
     lastSyncedStudentCount: students.length,
   });
 
@@ -372,12 +526,13 @@ export const pushPrimarySnapshotToGoogleDrive = async (
     fileId: savedFileId,
     syncedAt: now.toISOString(),
     studentCount: students.length,
+    folderPath,
   };
 };
 
 /**
- * SECONDARY (OR RESTORE) MODE: Downloads `Lakshay_Library_Master_Sync.json` from Google Drive
- * and applies the Primary device's student database, payments, attendance, shifts, and seats locally.
+ * SECONDARY (OR RESTORE) MODE: Downloads `Lakshay_Library_Master_Sync.json` from
+ * `Lakshay_Library_Master/Master_Sync_Backups/` on Google Drive and applies the snapshot locally.
  */
 export const pullMasterSnapshotFromGoogleDrive = async (
   accessToken: string
@@ -390,7 +545,7 @@ export const pullMasterSnapshotFromGoogleDrive = async (
   const fileMeta = await findMasterSyncFileOnDrive(accessToken);
   if (!fileMeta) {
     throw new Error(
-      `No '${MASTER_DRIVE_BACKUP_FILENAME}' file found in Google Drive. Push a snapshot from your Primary phone first.`
+      `No '${MASTER_DRIVE_BACKUP_FILENAME}' found in '${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME}'. Push a snapshot from your Primary phone first.`
     );
   }
 
@@ -416,7 +571,6 @@ export const pullMasterSnapshotFromGoogleDrive = async (
     throw new Error('Invalid master sync file format in Google Drive.');
   }
 
-  // Hydrate local database from Primary snapshot
   importSyncedFirestoreSnapshot(
     payload.data.students,
     payload.data.payments || {},

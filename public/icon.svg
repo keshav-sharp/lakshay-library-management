@@ -1,19 +1,28 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#d97706" />
-      <stop offset="100%" stop-color="#92400e" />
+      <stop offset="0%" stop-color="#133b4a" />
+      <stop offset="100%" stop-color="#071923" />
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fcd34d" />
+      <stop offset="50%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#b45309" />
+    </linearGradient>
+    <linearGradient id="tealPage" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#99f6e4" />
+      <stop offset="100%" stop-color="#2dd4bf" />
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#bg)" />
-  <rect x="64" y="64" width="384" height="384" rx="80" fill="#0f172a" fill-opacity="0.18" />
-  <path
-    d="M144 156C144 142.745 154.745 132 168 132H232C245.255 132 256 142.745 256 156V364C256 355.163 248.837 348 240 348H168C154.745 348 144 337.255 144 324V156Z"
-    fill="#fef3c7"
-  />
-  <path
-    d="M368 156C368 142.745 357.255 132 344 132H280C266.745 132 256 142.745 256 156V364C256 355.163 263.163 348 272 348H344C357.255 348 368 337.255 368 324V156Z"
-    fill="#fde68a"
-  />
-  <circle cx="256" cy="380" r="20" fill="#fbbf24" />
+  <rect width="512" height="512" rx="112" fill="url(#bg)" stroke="#1e4e5f" stroke-width="8" />
+  <!-- Open Book Base -->
+  <path d="M88 156 C168 156, 224 176, 256 204 C288 176, 344 156, 424 156 L424 388 C344 388, 288 408, 256 436 C224 408, 168 388, 88 388 Z" fill="#0f2937" stroke="url(#gold)" stroke-width="10" stroke-linejoin="round" />
+  <!-- Right Page Archway Portal -->
+  <path d="M262 192 C294 166, 344 148, 404 136 L404 364 C344 372, 294 390, 262 416 Z" fill="url(#tealPage)" opacity="0.88" />
+  <path d="M296 368 L296 232 L334 202 L372 232 L372 368 Z" fill="#0b2430" />
+  <path d="M316 368 L316 268 A18 18 0 0 1 352 268 L352 368 Z" fill="url(#gold)" />
+  <!-- Left Page Golden L Monogram -->
+  <path d="M138 96 L176 116 L176 296 L236 316 L246 352 L138 326 Z" fill="url(#gold)" />
+  <!-- Luminous Wave -->
+  <path d="M116 256 Q180 220, 246 264 T396 248" fill="none" stroke="#fde68a" stroke-width="6" stroke-linecap="round" opacity="0.85" />
 </svg>

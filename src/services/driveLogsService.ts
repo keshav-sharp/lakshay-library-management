@@ -1,10 +1,17 @@
-import { getGoogleDriveSyncConfig } from './googleDriveSyncService';
+import {
+  MASTER_DRIVE_ROOT_FOLDER_NAME,
+  AUTOMATED_LOGS_SUBFOLDER_NAME,
+  ensureDriveFolderExists,
+  getGoogleDriveSyncConfig,
+  saveGoogleDriveSyncConfig,
+} from './googleDriveSyncService';
 
-export const LOGS_FOLDER_NAME = 'Lakshay_Library_Logs';
+export const LOGS_FOLDER_NAME = `${MASTER_DRIVE_ROOT_FOLDER_NAME}/${AUTOMATED_LOGS_SUBFOLDER_NAME}`;
 export const CRASH_LOGS_FILENAME = 'crash_and_error_logs.json';
 export const ACTIVE_CLIENTS_FILENAME = 'active_clients_status.json';
 
 export interface DriveLogFolderInfo {
+  rootFolderId?: string;
   folderId: string;
   folderName: string;
   lastSyncedAtISO: string | null;
@@ -12,7 +19,7 @@ export interface DriveLogFolderInfo {
   activeClientsFileId: string | null;
 }
 
-const LOGS_FOLDER_STORAGE_KEY = 'lakshay_library_drive_logs_folder_meta_v1';
+const LOGS_FOLDER_STORAGE_KEY = 'lakshay_library_drive_logs_folder_meta_v2';
 
 export const getStoredDriveLogsFolderMeta = (): DriveLogFolderInfo | null => {
   try {
@@ -32,89 +39,51 @@ export const saveStoredDriveLogsFolderMeta = (meta: DriveLogFolderInfo) => {
 };
 
 /**
- * Finds or creates the `Lakshay_Library_Logs` folder in Google Drive.
+ * Finds or creates `Lakshay_Library_Master/Automated_Logs` folder hierarchy in Google Drive.
  */
 export const ensureLogsFolderOnDrive = async (accessToken: string): Promise<string> => {
   const meta = getStoredDriveLogsFolderMeta();
-  if (meta?.folderId) {
-    // Verify it still exists and is not trashed
-    try {
-      const checkRes = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${meta.folderId}?fields=id,name,trashed`,
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
-      );
-      if (checkRes.ok) {
-        const checkData = await checkRes.json();
-        if (!checkData.trashed) {
-          return meta.folderId;
-        }
-      }
-    } catch {
-      // Continue to search
-    }
-  }
+  const syncConfig = getGoogleDriveSyncConfig();
 
-  // Search for folder by name
-  const query = encodeURIComponent(
-    `name = '${LOGS_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
+  // 1. Ensure Root Master Folder (`Lakshay_Library_Master`) exists
+  const rootFolderId = await ensureDriveFolderExists(
+    accessToken,
+    MASTER_DRIVE_ROOT_FOLDER_NAME,
+    null,
+    meta?.rootFolderId || syncConfig.masterRootFolderId,
+    'Lakshay Library Master Cloud Directory (Contains Master Sync Backups and Automated Logs)'
   );
-  const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${query}&spaces=drive&fields=files(id,name)&pageSize=1`;
 
-  const searchRes = await fetch(searchUrl, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-
-  if (searchRes.ok) {
-    const searchData = await searchRes.json();
-    if (searchData.files && searchData.files.length > 0) {
-      const existingFolderId = searchData.files[0].id;
-      saveStoredDriveLogsFolderMeta({
-        folderId: existingFolderId,
-        folderName: LOGS_FOLDER_NAME,
-        lastSyncedAtISO: meta?.lastSyncedAtISO || null,
-        crashLogsFileId: meta?.crashLogsFileId || null,
-        activeClientsFileId: meta?.activeClientsFileId || null,
-      });
-      return existingFolderId;
-    }
+  if (syncConfig.masterRootFolderId !== rootFolderId) {
+    saveGoogleDriveSyncConfig({
+      ...syncConfig,
+      masterRootFolderId: rootFolderId,
+    });
   }
 
-  // Create folder if not found
-  const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      name: LOGS_FOLDER_NAME,
-      mimeType: 'application/vnd.google-apps.folder',
-      description: 'Lakshay Library automated crash logs and active client heartbeats',
-    }),
-  });
-
-  if (!createRes.ok) {
-    throw new Error(`Failed to create ${LOGS_FOLDER_NAME} folder in Google Drive (${createRes.status})`);
-  }
-
-  const createdData = await createRes.json();
-  const folderId = createdData.id;
+  // 2. Ensure `Automated_Logs` Subfolder exists inside `Lakshay_Library_Master`
+  const logsSubfolderId = await ensureDriveFolderExists(
+    accessToken,
+    AUTOMATED_LOGS_SUBFOLDER_NAME,
+    rootFolderId,
+    meta?.folderId,
+    'Lakshay Library Automated Crash Logs & Active Client Heartbeats Subfolder'
+  );
 
   saveStoredDriveLogsFolderMeta({
-    folderId,
+    rootFolderId,
+    folderId: logsSubfolderId,
     folderName: LOGS_FOLDER_NAME,
-    lastSyncedAtISO: new Date().toISOString(),
-    crashLogsFileId: null,
-    activeClientsFileId: null,
+    lastSyncedAtISO: meta?.lastSyncedAtISO || new Date().toISOString(),
+    crashLogsFileId: meta?.crashLogsFileId || null,
+    activeClientsFileId: meta?.activeClientsFileId || null,
   });
 
-  return folderId;
+  return logsSubfolderId;
 };
 
 /**
- * Searches for a specific file inside the `Lakshay_Library_Logs` folder.
+ * Searches for a specific file inside the `Lakshay_Library_Master/Automated_Logs` subfolder.
  */
 export const findFileInLogsFolder = async (
   accessToken: string,
@@ -139,7 +108,7 @@ export const findFileInLogsFolder = async (
 };
 
 /**
- * Uploads or updates a JSON file inside the `Lakshay_Library_Logs` folder.
+ * Uploads or updates a JSON file inside `Lakshay_Library_Master/Automated_Logs`.
  */
 export const uploadJsonToLogsFolder = async (
   accessToken: string,
@@ -212,7 +181,7 @@ export const uploadJsonToLogsFolder = async (
 };
 
 /**
- * Downloads a file from the `Lakshay_Library_Logs` folder.
+ * Downloads a file from `Lakshay_Library_Master/Automated_Logs`.
  */
 export const downloadJsonFromLogsFolder = async <T>(
   accessToken: string,

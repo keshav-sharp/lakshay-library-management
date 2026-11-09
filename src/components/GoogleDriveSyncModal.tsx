@@ -7,6 +7,9 @@ import {
   DriveBackupFileMetadata,
   GoogleDriveSyncConfig,
   MASTER_DRIVE_BACKUP_FILENAME,
+  MASTER_DRIVE_ROOT_FOLDER_NAME,
+  MASTER_SYNC_SUBFOLDER_NAME,
+  MASTER_DRIVE_SYNC_PATH,
   findMasterSyncFileOnDrive,
   getDriveAccessToken,
   getGoogleDriveSyncConfig,
@@ -408,10 +411,13 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  2. Google Drive Account
+                  2. Google Drive Account &amp; Master Folder
                 </h3>
                 <p className="text-xs text-slate-600 mt-0.5">
-                  Sync file: <code className="font-mono">{MASTER_DRIVE_BACKUP_FILENAME}</code>
+                  Location:{' '}
+                  <code className="font-mono text-[11px] text-amber-700 font-semibold">
+                    {MASTER_DRIVE_SYNC_PATH}
+                  </code>
                 </p>
               </div>
 
@@ -430,8 +436,9 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
             {needsAuth || !accessToken ? (
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/60 flex flex-col items-center text-center space-y-3">
                 <p className="text-xs text-slate-600 max-w-md">
-                  Sign in with your Google account to allow Lakshay Library to read and update{' '}
-                  <code>{MASTER_DRIVE_BACKUP_FILENAME}</code> in your Google Drive.
+                  Sign in with your Google account to allow Lakshay Library to create the{' '}
+                  <code>{MASTER_DRIVE_ROOT_FOLDER_NAME}</code> master directory and sync inside{' '}
+                  <code>{MASTER_SYNC_SUBFOLDER_NAME}/{MASTER_DRIVE_BACKUP_FILENAME}</code>.
                 </p>
 
                 {/* Official "Sign in with Google" Material Button */}
@@ -504,13 +511,16 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
 
                 {/* Remote Drive File Card */}
                 <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/60 text-xs space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono font-bold text-slate-900">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono font-bold text-slate-900 break-all">
                       {MASTER_DRIVE_BACKUP_FILENAME}
                     </span>
-                    <span className="text-[11px] font-semibold text-amber-600">
-                      {driveFileMeta ? 'Found on Google Drive' : 'Not uploaded yet'}
+                    <span className="text-[11px] font-semibold text-amber-600 shrink-0">
+                      {driveFileMeta ? 'Found in Master Folder' : 'Not uploaded yet'}
                     </span>
+                  </div>
+                  <div className="text-[11px] font-mono text-slate-500">
+                    Folder: <strong className="text-slate-700">{MASTER_DRIVE_ROOT_FOLDER_NAME} / {MASTER_SYNC_SUBFOLDER_NAME}</strong>
                   </div>
                   {driveFileMeta ? (
                     <div className="text-[11px] text-slate-500 space-y-0.5">
@@ -532,8 +542,8 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                     </div>
                   ) : (
                     <p className="text-[11px] text-slate-500">
-                      No master sync file exists in your Google Drive yet. Push from your Primary
-                      phone to create it.
+                      Master folder structure is ready. Push from your Primary phone to upload the snapshot into{' '}
+                      <code>{MASTER_DRIVE_ROOT_FOLDER_NAME}/{MASTER_SYNC_SUBFOLDER_NAME}</code>.
                     </p>
                   )}
                 </div>
