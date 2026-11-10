@@ -130,7 +130,7 @@ This app is a certified Progressive Web App (PWA):
 Curious about the technical challenges we solved while building this app across Web (PWA) and Android (`.apk`)? We maintain a full post-mortem log and closed issue tracker covering every bug, root cause, and architectural fix:
 
 - 📖 **[Read the Full `ENGINEERING_LOG.md`](ENGINEERING_LOG.md)**
-- 🐛 **[Browse Resolved GitHub Issues (`#1` – `#8`)](https://github.com/keshav-sharp/lakshay-library-management/issues?q=is%3Aissue+is%3Aclosed)**
+- 🐛 **[Browse Resolved GitHub Issues (`#1` – `#9`)](https://github.com/keshav-sharp/lakshay-library-management/issues?q=is%3Aissue+is%3Aclosed)**
 
 | Issue | Category | Summary of Challenge & Fix | Fixed In |
 | :--- | :--- | :--- | :--- |
@@ -142,6 +142,7 @@ Curious about the technical challenges we solved while building this app across 
 | **[#6](https://github.com/keshav-sharp/lakshay-library-management/issues/6)** | OAuth Redirects | Fixed `400 Malformed Request` during Google Sign-In on Android APK via `allowNavigation: ["*"]` and WebView third-party cookie support | `v2.0.1` |
 | **[#7](https://github.com/keshav-sharp/lakshay-library-management/issues/7)** | Native Gestures | Replaced menu-based exit button with native Android `OnBackPressedDispatcher` gesture interception & exit confirmation animation | `v2.0.1` |
 | **[#8](https://github.com/keshav-sharp/lakshay-library-management/issues/8)** | Security (CodeQL) | Resolved CodeQL High-severity alert (`CWE-312`) by keeping OAuth access tokens strictly in memory instead of `localStorage` | `v2.0.1` |
+| **[#9](https://github.com/keshav-sharp/lakshay-library-management/issues/9)** | Cross-Account Sync | Enabled Secondary phones signed in with a different Gmail to pull `Lakshay_Library_Master` via 1-tap Drive sharing & "Shared with me" discovery | `v2.0.2` |
 
 ---
 
@@ -151,7 +152,7 @@ Curious about the technical challenges we solved while building this app across 
 | :--- | :--- | :--- |
 | **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v2.0.2)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
 | **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v2.0.2`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
-| **Engineering Issues & Fixes Log** | 🛠️ **[View `ENGINEERING_LOG.md`](ENGINEERING_LOG.md)** | Root-cause analysis and fixes for all 8 engineering & security challenges solved during development. |
+| **Engineering Issues & Fixes Log** | 🛠️ **[View `ENGINEERING_LOG.md`](ENGINEERING_LOG.md)** | Root-cause analysis and fixes for all 9 engineering & security challenges solved during development. |
 | **Full Changelog** | 📜 **[View `CHANGELOG.md`](CHANGELOG.md)** | Detailed version-by-version history of features, fixes, and improvements. |
 
 ---
