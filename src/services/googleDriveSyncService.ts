@@ -32,10 +32,10 @@ export const MASTER_DRIVE_BACKUP_FILENAME = 'Lakshay_Library_Master_Sync.json';
 export const MASTER_DRIVE_SYNC_PATH = `${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME}/${MASTER_DRIVE_BACKUP_FILENAME}`;
 export const MASTER_DRIVE_LOGS_PATH = `${MASTER_DRIVE_ROOT_FOLDER_NAME}/${AUTOMATED_LOGS_SUBFOLDER_NAME}`;
 
-// Persistent Local Storage Keys for Sign-In Session & Sync Configuration
-export const GOOGLE_AUTH_SESSION_STORAGE_KEY = 'lakshay_library_google_auth_session_v2';
+// Persistent Local Storage Keys for Sign-In Profile Metadata & Sync Configuration
+export const GOOGLE_AUTH_SESSION_STORAGE_KEY = 'lakshay_library_google_profile_meta_v2';
 export const GDRIVE_SYNC_CONFIG_KEY = 'lakshay_library_gdrive_sync_config_v1';
-export const PENDING_DRIVE_AUTH_REDIRECT_KEY = 'lakshay_library_pending_drive_redirect';
+export const PENDING_DRIVE_REDIRECT_FLAG_KEY = 'lakshay_library_pending_drive_redirect';
 
 export type DeviceSyncRole = 'PRIMARY' | 'SECONDARY';
 
@@ -44,9 +44,8 @@ export interface StoredGoogleAuthSession {
   email: string | null;
   displayName: string | null;
   photoURL: string | null;
-  accessToken: string;
   savedAtISO: string;
-  authMethod: 'POPUP' | 'REDIRECT' | 'RESTORED';
+  signInFlow: 'POPUP' | 'REDIRECT' | 'RESTORED';
   localStorageKey: string;
   driveMasterSyncPath: string;
   driveAutomatedLogsPath: string;
@@ -137,14 +136,15 @@ export const isNativeAndroidWebView = (): boolean => {
 };
 
 /**
- * Reads the persisted Google Sign-In session from localStorage (`lakshay_library_google_auth_session_v2`).
+ * Reads the persisted non-sensitive Google profile metadata from localStorage.
+ * OAuth access tokens are never stored in clear text in localStorage.
  */
 export const getStoredGoogleAuthSession = (): StoredGoogleAuthSession | null => {
   try {
     const raw = localStorage.getItem(GOOGLE_AUTH_SESSION_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredGoogleAuthSession;
-    if (parsed && parsed.accessToken && parsed.uid) {
+    if (parsed && parsed.uid) {
       return parsed;
     }
     return null;
@@ -154,65 +154,54 @@ export const getStoredGoogleAuthSession = (): StoredGoogleAuthSession | null => 
 };
 
 /**
- * Persists the Google Sign-In session and OAuth token to localStorage (`lakshay_library_google_auth_session_v2`).
+ * Persists non-sensitive Google user profile & Drive folder metadata to localStorage.
+ * Sensitive OAuth access tokens are kept strictly in runtime memory (`cachedAccessToken`).
  */
 export const saveStoredGoogleAuthSession = (
   user: Pick<User, 'uid' | 'email' | 'displayName' | 'photoURL'>,
-  accessToken: string,
-  authMethod: StoredGoogleAuthSession['authMethod'] = 'POPUP'
+  signInFlow: StoredGoogleAuthSession['signInFlow'] = 'POPUP'
 ): StoredGoogleAuthSession => {
-  const session: StoredGoogleAuthSession = {
+  const profileMeta: StoredGoogleAuthSession = {
     uid: user.uid,
     email: user.email || null,
     displayName: user.displayName || null,
     photoURL: user.photoURL || null,
-    accessToken,
     savedAtISO: new Date().toISOString(),
-    authMethod,
+    signInFlow,
     localStorageKey: GOOGLE_AUTH_SESSION_STORAGE_KEY,
     driveMasterSyncPath: MASTER_DRIVE_SYNC_PATH,
     driveAutomatedLogsPath: MASTER_DRIVE_LOGS_PATH,
   };
   try {
-    localStorage.setItem(GOOGLE_AUTH_SESSION_STORAGE_KEY, JSON.stringify(session));
+    localStorage.setItem(GOOGLE_AUTH_SESSION_STORAGE_KEY, JSON.stringify(profileMeta));
   } catch {
     // Ignore storage quota errors
   }
-  cachedAccessToken = accessToken;
-  return session;
+  return profileMeta;
 };
 
 /**
- * Clears the persisted Google Sign-In session from localStorage and memory.
+ * Clears the persisted Google profile metadata and in-memory access token.
  */
 export const clearStoredGoogleAuthSession = (): void => {
   cachedAccessToken = null;
   try {
     localStorage.removeItem(GOOGLE_AUTH_SESSION_STORAGE_KEY);
-    sessionStorage.removeItem(PENDING_DRIVE_AUTH_REDIRECT_KEY);
+    sessionStorage.removeItem(PENDING_DRIVE_REDIRECT_FLAG_KEY);
   } catch {
     // Ignore storage errors
   }
 };
 
-// Initialize in-memory token from persistent storage on startup
+// Keep OAuth access token strictly in memory (never written to localStorage in clear text)
 let isSigningIn = false;
-let cachedAccessToken: string | null = getStoredGoogleAuthSession()?.accessToken || null;
+let cachedAccessToken: string | null = null;
 let redirectResultPromise: Promise<{ user: User; token: string } | null> | null = null;
 
 const extractAccessTokenFromCredentialResult = (result: UserCredential | null): string | null => {
   if (!result) return null;
   const credential = GoogleAuthProvider.credentialFromResult(result);
-  if (credential?.accessToken) {
-    return credential.accessToken;
-  }
-  const tokenResponse = (
-    result as unknown as { _tokenResponse?: { oauthAccessToken?: string } }
-  )?._tokenResponse;
-  if (tokenResponse?.oauthAccessToken) {
-    return tokenResponse.oauthAccessToken;
-  }
-  return null;
+  return credential?.accessToken ?? null;
 };
 
 export const initDriveAuth = (
@@ -220,20 +209,9 @@ export const initDriveAuth = (
   onAuthFailure?: () => void
 ) => {
   const auth = getFirebaseAuth();
-  const storedSession = getStoredGoogleAuthSession();
 
   if (!auth) {
-    if (storedSession?.accessToken && onAuthSuccess) {
-      onAuthSuccess(
-        {
-          uid: storedSession.uid,
-          email: storedSession.email,
-          displayName: storedSession.displayName,
-          photoURL: storedSession.photoURL,
-        } as User,
-        storedSession.accessToken
-      );
-    } else if (onAuthFailure) {
+    if (onAuthFailure) {
       onAuthFailure();
     }
     return () => {};
@@ -244,8 +222,9 @@ export const initDriveAuth = (
       .then((result) => {
         if (result && result.user) {
           const token = extractAccessTokenFromCredentialResult(result);
+          saveStoredGoogleAuthSession(result.user, 'REDIRECT');
           if (token) {
-            saveStoredGoogleAuthSession(result.user, token, 'REDIRECT');
+            cachedAccessToken = token;
             return { user: result.user, token };
           }
         }
@@ -256,6 +235,7 @@ export const initDriveAuth = (
 
   redirectResultPromise.then((redirectData) => {
     if (redirectData && redirectData.token) {
+      cachedAccessToken = redirectData.token;
       if (onAuthSuccess) onAuthSuccess(redirectData.user, redirectData.token);
     }
   });
@@ -264,24 +244,13 @@ export const initDriveAuth = (
     if (redirectResultPromise) {
       await redirectResultPromise;
     }
-    const activeToken = cachedAccessToken || getStoredGoogleAuthSession()?.accessToken || null;
 
-    if (user && activeToken) {
-      cachedAccessToken = activeToken;
-      saveStoredGoogleAuthSession(user, activeToken, 'RESTORED');
-      if (onAuthSuccess) onAuthSuccess(user, activeToken);
-    } else if (storedSession?.accessToken) {
-      cachedAccessToken = storedSession.accessToken;
-      if (onAuthSuccess) {
-        onAuthSuccess(
-          (user || {
-            uid: storedSession.uid,
-            email: storedSession.email,
-            displayName: storedSession.displayName,
-            photoURL: storedSession.photoURL,
-          }) as User,
-          storedSession.accessToken
-        );
+    if (user) {
+      saveStoredGoogleAuthSession(user, 'RESTORED');
+      if (cachedAccessToken && onAuthSuccess) {
+        onAuthSuccess(user, cachedAccessToken);
+      } else if (!isSigningIn && onAuthFailure) {
+        onAuthFailure();
       }
     } else if (!isSigningIn) {
       if (onAuthFailure) onAuthFailure();
@@ -307,8 +276,8 @@ export const googleDriveSignIn = async (): Promise<{
 
     if (isNativeAndroidWebView()) {
       try {
-        sessionStorage.setItem(PENDING_DRIVE_AUTH_REDIRECT_KEY, '1');
-        localStorage.setItem(PENDING_DRIVE_AUTH_REDIRECT_KEY, '1');
+        sessionStorage.setItem(PENDING_DRIVE_REDIRECT_FLAG_KEY, '1');
+        localStorage.setItem(PENDING_DRIVE_REDIRECT_FLAG_KEY, '1');
       } catch {
         // Ignore storage errors
       }
@@ -321,7 +290,8 @@ export const googleDriveSignIn = async (): Promise<{
     if (!token) {
       throw new Error('Failed to obtain Google Drive access token.');
     }
-    saveStoredGoogleAuthSession(result.user, token, 'POPUP');
+    cachedAccessToken = token;
+    saveStoredGoogleAuthSession(result.user, 'POPUP');
     return { user: result.user, accessToken: token };
   } catch (err: unknown) {
     const code = (err as { code?: string })?.code || '';
@@ -331,8 +301,8 @@ export const googleDriveSignIn = async (): Promise<{
       code === 'auth/cancelled-popup-request'
     ) {
       try {
-        sessionStorage.setItem(PENDING_DRIVE_AUTH_REDIRECT_KEY, '1');
-        localStorage.setItem(PENDING_DRIVE_AUTH_REDIRECT_KEY, '1');
+        sessionStorage.setItem(PENDING_DRIVE_REDIRECT_FLAG_KEY, '1');
+        localStorage.setItem(PENDING_DRIVE_REDIRECT_FLAG_KEY, '1');
       } catch {
         // Ignore storage errors
       }
@@ -346,13 +316,7 @@ export const googleDriveSignIn = async (): Promise<{
 };
 
 export const getDriveAccessToken = (): string | null => {
-  if (cachedAccessToken) return cachedAccessToken;
-  const saved = getStoredGoogleAuthSession();
-  if (saved?.accessToken) {
-    cachedAccessToken = saved.accessToken;
-    return cachedAccessToken;
-  }
-  return null;
+  return cachedAccessToken;
 };
 
 export const getCurrentDriveUser = (): User | null => {
