@@ -867,12 +867,12 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                       Google shows <code>Error 403: access_denied</code> when a project&apos;s OAuth
                       screen is in <em>Testing</em> mode. Open{' '}
                       <a
-                        href="https://console.cloud.google.com/auth/audience?project=gen-lang-client-0586032146"
+                        href="https://console.cloud.google.com/auth/audience"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-amber-800 underline font-semibold"
                       >
-                        Google Cloud OAuth Audience (gen-lang-client-0586032146)
+                        Google Cloud Console → OAuth Audience
                       </a>{' '}
                       and click <strong>&quot;Publish App&quot;</strong> (or add the secondary email
                       under <strong>Test users → + Add users</strong>).

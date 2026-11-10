@@ -78,7 +78,7 @@ Lakshay Library uses a **Primary (Master Writer)** and **Secondary (Read-Only Fo
 2. **On the Secondary Phone**:
    - Open **Google Drive Daily Sync & Primary Role** and switch the role to **Secondary Phone**.
    - Paste the **Master Sync Key** into the box in **Section 1** and tap **Pull via Sync Key** (you can also sign in with your other Gmail using **Sign in with Another Gmail (Bypasses Error 403)**).
-   - *(Optional for Cloud Console Admin)*: To allow any Gmail account to use full Google Drive OAuth without adding individual test users, open [Google Cloud OAuth Audience (`gen-lang-client-0586032146`)](https://console.cloud.google.com/auth/audience?project=gen-lang-client-0586032146) and click **Publish App**.
+   - *(Optional for Cloud Console Admin)*: To allow any Gmail account to use full Google Drive OAuth without adding individual test users, open [Google Cloud Console → OAuth Audience](https://console.cloud.google.com/auth/audience) and click **Publish App**.
 
 ---
 

@@ -17,7 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - Removed the restricted `https://www.googleapis.com/auth/drive.readonly` OAuth scope from `SCOPES` in `src/services/googleDriveSyncService.ts` (which triggered Google's unverified-app block for non-owner Gmail accounts).
   - Added a **"Sign in with Another Gmail (Bypasses Error 403)"** mode on Secondary phones that requests only standard identity scopes (`email`, `profile`).
   - Added **1-Tap Master Sync Key Copy & Pull (`enableAnyoneReaderPermission` + API Key Fallback)** so the Primary Phone generates a Master Sync Key (`lastDriveFileId`) that any Secondary Phone can paste and pull with **1 tap (`Pull via Sync Key`)** — even without Google OAuth verification!
-  - Added a direct in-app link to **Google Cloud OAuth Audience (`gen-lang-client-0586032146`)** to publish the consent screen or add test users in 1 click.
+  - Added a direct in-app link to **Google Cloud Console → OAuth Audience** to publish the consent screen or add test users in 1 click.
 
 ---
 
