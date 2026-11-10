@@ -30,6 +30,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - Connected secondary and consecutive peer devices receive and update UPI credentials and standee images immediately via real-time sync subscription (`subscribeToUpiConfig`).
 - **Official GitHub Security Policy (`SECURITY.md`)**:
   - Established formal GitHub Security Policy in `SECURITY.md` and `.github/SECURITY.md` supporting `v2.0.x`, outlining private vulnerability reporting procedures, response timelines, and defensive architecture.
+- **Homepage Financial & Collection Analytics Overview Card**:
+  - Added a dedicated financial analytics summary banner on the homepage (`ALL` students tab) highlighting projected 30-day collection inflow and monthly run-rate with 1-click jump to full analytics.
+- **Navigation Drawer Menu Optimization**:
+  - Reordered Navigation Drawer items to place **Help & Documentation (FAQ)** at the bottom of the menu for clean ergonomics.
 
 ---
 

@@ -37,6 +37,8 @@ A production-grade, offline-first library and study hall management system built
    - Automatically synchronizes UPI ID, payee name, and custom reception standee image across all primary, secondary, and peer devices in real-time.
 10. **GitHub Security Policy & Threat Model (`SECURITY.md`)**:
     - Complete private vulnerability disclosure policy supporting `2.0.x` with 48h SLA and sandboxed architecture.
+11. **Homepage Financial Analytics & Navigation Drawer Optimization (`v2.0.7`)**:
+    - Embedded homepage financial analytics summary banner for instant 30-day collection forecasts and run-rates, with Help & Documentation placed conveniently at the bottom of the Navigation Drawer.
 
 ---
 
