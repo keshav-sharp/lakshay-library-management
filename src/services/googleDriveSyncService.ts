@@ -22,10 +22,9 @@ import {
 import { getStoredShifts, saveStoredShifts } from './shiftService';
 import { getStoredSeats, saveStoredSeats } from './seatService';
 
-export const SCOPES = [
-  'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/drive.readonly',
-];
+// Use only the non-sensitive `drive.file` scope (never `drive.readonly`, which is a Restricted scope
+// that triggers Google's Error 403: access_denied verification block).
+export const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
 
 // Hierarchical Master Folder & Subfolder Architecture on Google Drive
 export const MASTER_DRIVE_ROOT_FOLDER_NAME = 'Lakshay_Library_Master';
@@ -116,10 +115,17 @@ const getFirebaseAuth = (): Auth | null => {
   }
 };
 
-// Creates a fresh GoogleAuthProvider instance on each sign-in attempt to prevent stale OAuth state
-const createGoogleAuthProvider = (): GoogleAuthProvider => {
+// Creates a fresh GoogleAuthProvider instance on each sign-in attempt.
+// When `includeDriveScope` is false (e.g. Secondary phone signing in with a different unverified Gmail),
+// only standard `email` and `profile` scopes are requested so Google never blocks with Error 403.
+const createGoogleAuthProvider = (includeDriveScope = true): GoogleAuthProvider => {
   const provider = new GoogleAuthProvider();
-  SCOPES.forEach((scope) => provider.addScope(scope));
+  if (includeDriveScope) {
+    SCOPES.forEach((scope) => provider.addScope(scope));
+  } else {
+    provider.addScope('email');
+    provider.addScope('profile');
+  }
   provider.setCustomParameters({
     prompt: 'select_account',
   });
@@ -263,7 +269,9 @@ export const initDriveAuth = (
   });
 };
 
-export const googleDriveSignIn = async (): Promise<{
+export const googleDriveSignIn = async (options?: {
+  identityOnly?: boolean;
+}): Promise<{
   user: User;
   accessToken: string;
 } | null> => {
@@ -272,7 +280,8 @@ export const googleDriveSignIn = async (): Promise<{
     throw new Error('Firebase Auth is not configured in this build environment.');
   }
 
-  const freshProvider = createGoogleAuthProvider();
+  const includeDriveScope = !options?.identityOnly;
+  const freshProvider = createGoogleAuthProvider(includeDriveScope);
 
   try {
     isSigningIn = true;
@@ -291,7 +300,9 @@ export const googleDriveSignIn = async (): Promise<{
     }
 
     const result = await signInWithPopup(auth, freshProvider);
-    const token = extractAccessTokenFromCredentialResult(result);
+    const token =
+      extractAccessTokenFromCredentialResult(result) ||
+      (options?.identityOnly ? 'IDENTITY_SESSION_ACTIVE' : null);
     if (!token) {
       throw new Error('Failed to obtain Google Drive access token.');
     }
@@ -311,7 +322,7 @@ export const googleDriveSignIn = async (): Promise<{
       } catch {
         // Ignore storage errors
       }
-      await signInWithRedirect(auth, createGoogleAuthProvider());
+      await signInWithRedirect(auth, createGoogleAuthProvider(includeDriveScope));
       return null;
     }
     throw err;
@@ -535,9 +546,38 @@ export const extractDriveIdFromInput = (input?: string | null): string | null =>
 };
 
 /**
- * PRIMARY DEVICE HELPER: Grants read-only (or writer) permission on the `Lakshay_Library_Master`
- * root folder and `Master_Sync_Backups` subfolder to another Google account email so a Secondary
- * device signed in with a different Gmail address can pull the master snapshot.
+ * Enables link-based read permission (`type: 'anyone', role: 'reader'`) on a Drive file or folder
+ * created by the Primary Phone so a Secondary Phone can pull it using just the Sync Key (`fileId`)
+ * without hitting Google's Error 403 verification block on secondary Gmail accounts.
+ */
+export const enableAnyoneReaderPermission = async (
+  accessToken: string,
+  fileOrFolderId: string
+): Promise<void> => {
+  try {
+    await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileOrFolderId}/permissions?supportsAllDrives=true`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          role: 'reader',
+          type: 'anyone',
+        }),
+      }
+    );
+  } catch {
+    // Non-fatal if permission already exists
+  }
+};
+
+/**
+ * PRIMARY DEVICE HELPER: Grants read-only permission on the `Lakshay_Library_Master`
+ * root folder, `Master_Sync_Backups` subfolder, and `Lakshay_Library_Master_Sync.json` file
+ * to another Google account email AND enables Sync Key reader access.
  */
 export const shareMasterFolderWithEmail = async (
   accessToken: string,
@@ -549,10 +589,16 @@ export const shareMasterFolderWithEmail = async (
   }
 
   const { rootFolderId, syncSubfolderId } = await ensureMasterSyncFolderHierarchy(accessToken);
+  const config = getGoogleDriveSyncConfig();
+  const idsToShare = [rootFolderId, syncSubfolderId];
+  if (config.lastDriveFileId) {
+    idsToShare.push(config.lastDriveFileId);
+  }
 
-  for (const folderId of [rootFolderId, syncSubfolderId]) {
+  for (const id of idsToShare) {
+    await enableAnyoneReaderPermission(accessToken, id);
     const permRes = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${folderId}/permissions?sendNotificationEmail=false&supportsAllDrives=true`,
+      `https://www.googleapis.com/drive/v3/files/${id}/permissions?sendNotificationEmail=false&supportsAllDrives=true`,
       {
         method: 'POST',
         headers: {
@@ -579,7 +625,6 @@ export const shareMasterFolderWithEmail = async (
     }
   }
 
-  const config = getGoogleDriveSyncConfig();
   const existingEmails = config.sharedWithEmails || [];
   if (!existingEmails.includes(cleanEmail)) {
     saveGoogleDriveSyncConfig({
@@ -592,36 +637,77 @@ export const shareMasterFolderWithEmail = async (
 };
 
 /**
- * Searches Google Drive (including "Shared with me" folders when a Secondary phone signs in
- * with a different Gmail account) for `Lakshay_Library_Master_Sync.json`.
+ * Searches Google Drive for `Lakshay_Library_Master_Sync.json`.
+ * Supports both authenticated Drive API lookup AND direct Sync Key / Shared Link lookup
+ * (using `?key=${firebaseConfig.apiKey}`) so Secondary phones on any Gmail account can pull!
  */
 export const findMasterSyncFileOnDrive = async (
-  accessToken: string
+  accessToken?: string | null
 ): Promise<DriveBackupFileMetadata | null> => {
   const config = getGoogleDriveSyncConfig();
   const customSharedId = extractDriveIdFromInput(config.sharedFolderInput);
+  const hasRealOAuthToken = Boolean(accessToken && accessToken !== 'IDENTITY_SESSION_ACTIVE');
+  const apiKeyParam = firebaseConfig.apiKey ? `&key=${encodeURIComponent(firebaseConfig.apiKey)}` : '';
 
-  // 1. If the Secondary user pasted a specific Shared Folder / File ID or Link, check it first
+  // 1. If the Secondary user pasted a Sync Key (File ID / Folder ID) or Google Drive Share Link:
   if (customSharedId) {
-    const insideSharedFolderQuery = encodeURIComponent(
-      `name = '${MASTER_DRIVE_BACKUP_FILENAME}' and '${customSharedId}' in parents and trashed = false`
-    );
-    const sharedFolderUrl = `https://www.googleapis.com/drive/v3/files?q=${insideSharedFolderQuery}&spaces=drive&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc&pageSize=1`;
-    const sharedRes = await fetch(sharedFolderUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (sharedRes.ok) {
-      const sharedData = await sharedRes.json();
-      if (sharedData.files && sharedData.files.length > 0) {
-        return {
-          ...(sharedData.files[0] as DriveBackupFileMetadata),
-          folderPath: `Shared Folder (${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME})`,
-        };
+    const authHeaders: Record<string, string> = hasRealOAuthToken
+      ? { Authorization: `Bearer ${accessToken}` }
+      : {};
+
+    // 1a. Check if customSharedId is directly the `Lakshay_Library_Master_Sync.json` file ID
+    try {
+      const directFileUrl = `https://www.googleapis.com/drive/v3/files/${customSharedId}?supportsAllDrives=true&fields=id,name,mimeType,modifiedTime,size,trashed${
+        hasRealOAuthToken ? '' : apiKeyParam
+      }`;
+      const directRes = await fetch(directFileUrl, { headers: authHeaders });
+      if (directRes.ok) {
+        const directMeta = await directRes.json();
+        if (
+          !directMeta.trashed &&
+          directMeta.mimeType !== 'application/vnd.google-apps.folder'
+        ) {
+          return {
+            id: directMeta.id,
+            name: directMeta.name || MASTER_DRIVE_BACKUP_FILENAME,
+            modifiedTime: directMeta.modifiedTime || new Date().toISOString(),
+            size: directMeta.size,
+            folderPath: `Sync Key Linked (${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME})`,
+          };
+        }
       }
+    } catch {
+      // Fall through to folder search
+    }
+
+    // 1b. Otherwise treat customSharedId as a Shared Folder ID and look for `Lakshay_Library_Master_Sync.json` inside it
+    try {
+      const insideSharedFolderQuery = encodeURIComponent(
+        `name = '${MASTER_DRIVE_BACKUP_FILENAME}' and '${customSharedId}' in parents and trashed = false`
+      );
+      const sharedFolderUrl = `https://www.googleapis.com/drive/v3/files?q=${insideSharedFolderQuery}&spaces=drive&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc&pageSize=1${
+        hasRealOAuthToken ? '' : apiKeyParam
+      }`;
+      const sharedRes = await fetch(sharedFolderUrl, { headers: authHeaders });
+      if (sharedRes.ok) {
+        const sharedData = await sharedRes.json();
+        if (sharedData.files && sharedData.files.length > 0) {
+          return {
+            ...(sharedData.files[0] as DriveBackupFileMetadata),
+            folderPath: `Shared Folder (${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME})`,
+          };
+        }
+      }
+    } catch {
+      // Fall through
     }
   }
 
-  // 2. Search across all accessible Drive files (including "Shared with me" from Primary's Gmail)
+  if (!hasRealOAuthToken) {
+    return null;
+  }
+
+  // 2. Search across all accessible Drive files with OAuth token
   const globalFileQuery = encodeURIComponent(
     `name = '${MASTER_DRIVE_BACKUP_FILENAME}' and trashed = false`
   );
@@ -658,7 +744,7 @@ export const findMasterSyncFileOnDrive = async (
   }
 
   // 3. If this device is PRIMARY, ensure the Master folder hierarchy exists in its own Drive
-  if (config.deviceRole === 'PRIMARY') {
+  if (config.deviceRole === 'PRIMARY' && accessToken) {
     await ensureMasterSyncFolderHierarchy(accessToken);
   }
 
@@ -774,6 +860,13 @@ export const pushPrimarySnapshotToGoogleDrive = async (
   const resultData = await res.json();
   const savedFileId = resultData.id || targetFileId || '';
 
+  // Automatically enable reader permission on the uploaded file & subfolder so Secondary phones
+  // can pull using the Sync Key (`savedFileId`) even from another Gmail account without OAuth 403 blocks.
+  if (savedFileId) {
+    await enableAnyoneReaderPermission(accessToken, savedFileId);
+  }
+  await enableAnyoneReaderPermission(accessToken, syncSubfolderId);
+
   const latestConfig = getGoogleDriveSyncConfig();
   saveGoogleDriveSyncConfig({
     ...latestConfig,
@@ -795,9 +888,10 @@ export const pushPrimarySnapshotToGoogleDrive = async (
 /**
  * SECONDARY (OR RESTORE) MODE: Downloads `Lakshay_Library_Master_Sync.json` from
  * `Lakshay_Library_Master/Master_Sync_Backups/` on Google Drive and applies the snapshot locally.
+ * Works both with a full Google Drive OAuth token OR using a pasted Primary Sync Key / Share Link!
  */
 export const pullMasterSnapshotFromGoogleDrive = async (
-  accessToken: string
+  accessToken?: string | null
 ): Promise<{
   fileId: string;
   primaryDeviceName: string;
@@ -807,23 +901,38 @@ export const pullMasterSnapshotFromGoogleDrive = async (
   const fileMeta = await findMasterSyncFileOnDrive(accessToken);
   if (!fileMeta) {
     throw new Error(
-      `No '${MASTER_DRIVE_BACKUP_FILENAME}' found in '${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME}'. Push a snapshot from your Primary phone first.`
+      `No '${MASTER_DRIVE_BACKUP_FILENAME}' found. If using a different Gmail on this Secondary phone, paste the Primary Phone's Sync Key (or Shared Link) in Section 1 first.`
     );
   }
 
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${fileMeta.id}?alt=media`,
+  const hasRealOAuthToken = Boolean(accessToken && accessToken !== 'IDENTITY_SESSION_ACTIVE');
+  const apiKeyParam = firebaseConfig.apiKey ? `&key=${encodeURIComponent(firebaseConfig.apiKey)}` : '';
+
+  let res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileMeta.id}?alt=media&supportsAllDrives=true${
+      hasRealOAuthToken ? '' : apiKeyParam
+    }`,
     {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: hasRealOAuthToken
+        ? {
+            Authorization: `Bearer ${accessToken}`,
+          }
+        : {},
     }
   );
 
+  // Fallback to API key download if Bearer token belongs to a different account without Drive scope
+  if (!res.ok && hasRealOAuthToken && apiKeyParam) {
+    res = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileMeta.id}?alt=media&supportsAllDrives=true${apiKeyParam}`
+    );
+  }
+
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) {
-      clearStoredGoogleAuthSession();
-      throw new Error('AUTH_REQUIRED');
+      throw new Error(
+        'Google Drive denied download (403). On the Primary Phone, tap "Push Primary Snapshot to Drive" once so the Sync Key is active, then try again.'
+      );
     }
     throw new Error(`Failed to download snapshot from Google Drive (${res.status})`);
   }

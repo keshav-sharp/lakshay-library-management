@@ -118,7 +118,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
   // Explicit confirmation dialog state before updating/overwriting file in Google Drive
   const [showConfirmPushDialog, setShowConfirmPushDialog] = useState(false);
 
-  const refreshDriveFileMetadata = useCallback(async (tokenToUse: string) => {
+  const refreshDriveFileMetadata = useCallback(async (tokenToUse?: string | null) => {
     setIsCheckingDrive(true);
     setErrorMessage(null);
     try {
@@ -191,18 +191,18 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
   const activeClientCount = Math.max(1, onlineClients.length);
   const currentDeviceClient = clients.find((c) => c.isCurrentDevice) || clients[0];
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = async (identityOnly = false) => {
     setIsSigningIn(true);
     setErrorMessage(null);
     try {
-      const result = await googleDriveSignIn();
+      const result = await googleDriveSignIn({ identityOnly });
       if (result) {
         setUser(result.user);
         setStoredAuthSession(getStoredGoogleAuthSession());
         setAccessToken(result.accessToken);
         setNeedsAuth(false);
         onTriggerToast(
-          `Connected to Google Drive as ${result.user.email || result.user.displayName}!`
+          `Connected as ${result.user.email || result.user.displayName}!`
         );
         await refreshDriveFileMetadata(result.accessToken);
       }
@@ -324,8 +324,12 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
   };
 
   const handleSecondaryPullFromDrive = async () => {
-    if (!accessToken) {
+    const hasSyncKey = Boolean(syncConfig.sharedFolderInput?.trim());
+    if (!accessToken && !hasSyncKey) {
       setNeedsAuth(true);
+      onTriggerToast(
+        'Please either paste the Primary Phone Sync Key in Section 1 or sign in with Google.'
+      );
       return;
     }
 
@@ -733,94 +737,145 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
 
                 {/* Cross-Account Gmail Sync Helper (Different Gmail on Secondary Device) */}
                 {syncConfig.deviceRole === 'PRIMARY' ? (
-                  <div className="p-3 rounded-xl bg-white border border-slate-200/70 space-y-2">
+                  <div className="p-3 rounded-xl bg-white border border-slate-200/70 space-y-2.5">
                     <div className="text-[11px] font-bold text-slate-800 flex items-center justify-between">
-                      <span>Using a Different Gmail on Secondary Phone?</span>
-                      <span className="text-[10px] font-mono text-amber-700">Cross-Account Share</span>
+                      <span>🔑 Share with Secondary Phone (Any Gmail Account)</span>
+                      <span className="text-[10px] font-mono text-amber-700">Cross-Account Sync</span>
+                    </div>
+
+                    {/* 1-Tap Copy Master Sync Key */}
+                    <div className="p-2.5 rounded-xl bg-amber-50/80 border border-amber-200/80 space-y-1.5">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-amber-900">
+                        Method 1 (Recommended — Bypasses Error 403): Copy Master Sync Key
+                      </div>
+                      <p className="text-[11px] text-slate-600 leading-snug">
+                        After pushing your snapshot, copy this <strong>Master Sync Key</strong> and
+                        paste it on the Secondary Phone. It pulls your data immediately on{' '}
+                        <strong>any Gmail account</strong> without needing Google OAuth verification!
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={
+                            driveFileMeta?.id ||
+                            syncConfig.lastDriveFileId ||
+                            'Push Primary Snapshot once to generate Sync Key'
+                          }
+                          className="flex-1 px-2.5 py-1.5 rounded-lg border border-amber-300/80 bg-white text-[11px] font-mono text-slate-800"
+                        />
+                        <button
+                          type="button"
+                          disabled={!(driveFileMeta?.id || syncConfig.lastDriveFileId)}
+                          onClick={() => {
+                            const keyToCopy = driveFileMeta?.id || syncConfig.lastDriveFileId || '';
+                            if (keyToCopy && navigator.clipboard) {
+                              navigator.clipboard.writeText(keyToCopy);
+                              onTriggerToast('Master Sync Key copied! Send it to your Secondary Phone.');
+                            }
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold shrink-0"
+                        >
+                          Copy Sync Key
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Email Permission Grant */}
+                    <div className="space-y-1.5 pt-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                        Method 2: Grant Google Drive Folder Access by Email
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="email"
+                          value={shareEmailInput}
+                          onChange={(e) => setShareEmailInput(e.target.value)}
+                          placeholder="secondary-user@gmail.com"
+                          className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200/80 bg-slate-50 text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleShareFolderWithSecondaryEmail}
+                          disabled={isSharingEmail || !shareEmailInput.trim()}
+                          className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white text-xs font-bold shrink-0 transition-all"
+                        >
+                          {isSharingEmail ? 'Sharing...' : 'Grant Access'}
+                        </button>
+                      </div>
+                      {syncConfig.sharedWithEmails && syncConfig.sharedWithEmails.length > 0 && (
+                        <div className="text-[10px] text-emerald-700 font-mono">
+                          Shared with: {syncConfig.sharedWithEmails.join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-white border border-slate-200/70 space-y-2.5">
+                    <div className="text-[11px] font-bold text-slate-800 flex items-center justify-between">
+                      <span>🔑 Pull from Primary Phone (Works with Any Gmail!)</span>
+                      <span className="text-[10px] font-mono text-emerald-700">No Error 403 Block</span>
                     </div>
                     <p className="text-[11px] text-slate-500 leading-snug">
-                      Enter the Secondary phone&apos;s Gmail address below (or share{' '}
-                      <code>{MASTER_DRIVE_ROOT_FOLDER_NAME}</code> directly in the Google Drive app) so
-                      their account has permission to read your master sync file.
+                      Paste the <strong>Master Sync Key</strong> (or Google Drive Share Link) from your
+                      Primary Phone below and tap <strong>Pull Daily Snapshot Now</strong> — works
+                      instantly even if this phone uses a different Gmail account!
                     </p>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                       <input
-                        type="email"
-                        value={shareEmailInput}
-                        onChange={(e) => setShareEmailInput(e.target.value)}
-                        placeholder="secondary-user@gmail.com"
-                        className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200/80 bg-slate-50 text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40"
+                        type="text"
+                        value={syncConfig.sharedFolderInput || ''}
+                        onChange={(e) => handleSharedFolderInputChange(e.target.value)}
+                        placeholder="Paste Primary Phone Master Sync Key or Shared Drive Link"
+                        className="flex-1 px-3 py-2 rounded-xl border border-slate-200/80 bg-slate-50 text-xs text-slate-900 font-mono focus:outline-hidden focus:ring-2 focus:ring-amber-500/40"
                       />
                       <button
                         type="button"
-                        onClick={handleShareFolderWithSecondaryEmail}
-                        disabled={isSharingEmail || !shareEmailInput.trim()}
-                        className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold shrink-0 transition-all"
+                        onClick={handleSecondaryPullFromDrive}
+                        disabled={isSyncing || !syncConfig.sharedFolderInput?.trim()}
+                        className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold shrink-0 flex items-center justify-center gap-1.5 transition-all"
                       >
-                        {isSharingEmail ? 'Sharing...' : 'Grant Access'}
+                        <CloudDownload className="w-3.5 h-3.5" />
+                        <span>{isSyncing ? 'Pulling...' : 'Pull via Sync Key'}</span>
                       </button>
                     </div>
-                    {syncConfig.sharedWithEmails && syncConfig.sharedWithEmails.length > 0 && (
-                      <div className="text-[10px] text-emerald-700 font-mono">
-                        Shared with: {syncConfig.sharedWithEmails.join(', ')}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="p-3 rounded-xl bg-white border border-slate-200/70 space-y-2">
-                    <div className="text-[11px] font-bold text-slate-800 flex items-center justify-between">
-                      <span>Signed in with a Different Gmail than Primary?</span>
-                      <span className="text-[10px] font-mono text-sky-700">Auto &quot;Shared with me&quot;</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 leading-snug">
-                      Once the Primary phone shares <code>{MASTER_DRIVE_ROOT_FOLDER_NAME}</code> with your
-                      Gmail address, this Secondary phone automatically finds{' '}
-                      <code>{MASTER_DRIVE_BACKUP_FILENAME}</code> in your Google Drive&apos;s{' '}
-                      <strong>&quot;Shared with me&quot;</strong>. Optionally, you can also paste the
-                      shared folder link or ID below:
-                    </p>
-                    <input
-                      type="text"
-                      value={syncConfig.sharedFolderInput || ''}
-                      onChange={(e) => handleSharedFolderInputChange(e.target.value)}
-                      placeholder="Optional: Paste shared Google Drive folder link or ID"
-                      className="w-full px-3 py-1.5 rounded-xl border border-slate-200/80 bg-slate-50 text-xs text-slate-900 font-mono focus:outline-hidden focus:ring-2 focus:ring-amber-500/40"
-                    />
                   </div>
                 )}
 
-                {/* In-App Sharing & Secondary Sync Guide Note */}
+                {/* In-App Sharing & Error 403 Fix Guide Note */}
                 <div className="p-3.5 rounded-xl bg-amber-50/75 border border-amber-200/80 text-[11px] text-slate-700 space-y-2">
                   <div className="font-bold text-amber-900 flex items-center justify-between gap-2">
-                    <span>📌 Note: How Secondary Phone Accesses {MASTER_DRIVE_ROOT_FOLDER_NAME}</span>
+                    <span>📌 How to Sync Another Gmail &amp; Fix &quot;Error 403: access_denied&quot;</span>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                      Quick Steps
+                      2 Ways
                     </span>
                   </div>
                   <div className="space-y-1.5 leading-relaxed">
                     <div>
-                      <strong className="text-slate-900">• Same Gmail on Both Phones:</strong> Sign in
-                      with the same Google account on both phones. Set Phone 1 to{' '}
-                      <strong>Primary Phone</strong> (tap <em>Push Primary Snapshot</em>) and Phone 2 to{' '}
-                      <strong>Secondary Phone</strong> (tap <em>Pull Daily Snapshot</em>).
+                      <strong className="text-slate-900">
+                        • Way 1 — Instant Sync Key (No Google Verification Needed):
+                      </strong>{' '}
+                      On the Primary Phone, tap <strong>Copy Sync Key</strong> after pushing your
+                      snapshot. On the Secondary Phone, paste that key into the box above and tap{' '}
+                      <strong>Pull via Sync Key</strong> (or sign in using{' '}
+                      <strong>Sign in with Another Gmail (Identity Mode)</strong> below).
                     </div>
                     <div>
-                      <strong className="text-slate-900">• Different Gmail on Secondary Phone:</strong>
-                      <ol className="list-decimal list-inside pl-1 mt-0.5 space-y-0.5 text-slate-600">
-                        <li>
-                          On the <strong>Primary Phone</strong>, enter the Secondary user&apos;s Gmail
-                          address in the box above and tap <strong>Grant Access</strong> (or share the{' '}
-                          <code>{MASTER_DRIVE_ROOT_FOLDER_NAME}</code> folder as <em>Viewer</em> in the
-                          Google Drive app).
-                        </li>
-                        <li>
-                          On the <strong>Secondary Phone</strong>, select <strong>Secondary Phone</strong>{' '}
-                          role, sign in with that Secondary Gmail account, and tap{' '}
-                          <strong>Pull Daily Snapshot from Primary</strong>. The app automatically finds
-                          the shared <code>{MASTER_DRIVE_BACKUP_FILENAME}</code> inside your Google
-                          Drive&apos;s <strong>&quot;Shared with me&quot;</strong>!
-                        </li>
-                      </ol>
+                      <strong className="text-slate-900">
+                        • Way 2 — Enable Full Google OAuth for All Emails (1-Click in Cloud Console):
+                      </strong>{' '}
+                      Google shows <code>Error 403: access_denied</code> when a project&apos;s OAuth
+                      screen is in <em>Testing</em> mode. Open{' '}
+                      <a
+                        href="https://console.cloud.google.com/auth/audience?project=gen-lang-client-0586032146"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-amber-800 underline font-semibold"
+                      >
+                        Google Cloud OAuth Audience (gen-lang-client-0586032146)
+                      </a>{' '}
+                      and click <strong>&quot;Publish App&quot;</strong> (or add the secondary email
+                      under <strong>Test users → + Add users</strong>).
                     </div>
                   </div>
                 </div>
@@ -903,46 +958,59 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                     </p>
 
                     {/* Official "Sign in with Google" Material Button */}
-                    <button
-                      type="button"
-                      onClick={handleGoogleLogin}
-                      disabled={isSigningIn}
-                      className="gsi-material-button"
-                    >
-                      <div className="gsi-material-button-state" />
-                      <div className="gsi-material-button-content-wrapper">
-                        <div className="gsi-material-button-icon">
-                          <svg
-                            version="1.1"
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 48 48"
-                            style={{ display: 'block' }}
-                          >
-                            <path
-                              fill="#EA4335"
-                              d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-                            />
-                            <path
-                              fill="#4285F4"
-                              d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-                            />
-                            <path
-                              fill="#FBBC05"
-                              d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-                            />
-                            <path
-                              fill="#34A853"
-                              d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-                            />
-                            <path fill="none" d="M0 0h48v48H0z" />
-                          </svg>
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 w-full">
+                      <button
+                        type="button"
+                        onClick={() => handleGoogleLogin(false)}
+                        disabled={isSigningIn}
+                        className="gsi-material-button"
+                      >
+                        <div className="gsi-material-button-state" />
+                        <div className="gsi-material-button-content-wrapper">
+                          <div className="gsi-material-button-icon">
+                            <svg
+                              version="1.1"
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 48 48"
+                              style={{ display: 'block' }}
+                            >
+                              <path
+                                fill="#EA4335"
+                                d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+                              />
+                              <path
+                                fill="#4285F4"
+                                d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+                              />
+                              <path
+                                fill="#FBBC05"
+                                d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+                              />
+                              <path
+                                fill="#34A853"
+                                d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+                              />
+                              <path fill="none" d="M0 0h48v48H0z" />
+                            </svg>
+                          </div>
+                          <span className="gsi-material-button-contents">
+                            {isSigningIn ? 'Connecting to Google Drive...' : 'Sign in with Google'}
+                          </span>
+                          <span style={{ display: 'none' }}>Sign in with Google</span>
                         </div>
-                        <span className="gsi-material-button-contents">
-                          {isSigningIn ? 'Connecting to Google Drive...' : 'Sign in with Google'}
-                        </span>
-                        <span style={{ display: 'none' }}>Sign in with Google</span>
-                      </div>
-                    </button>
+                      </button>
+
+                      {syncConfig.deviceRole === 'SECONDARY' && (
+                        <button
+                          type="button"
+                          onClick={() => handleGoogleLogin(true)}
+                          disabled={isSigningIn}
+                          className="px-3.5 py-2.5 rounded-full border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 text-xs font-bold transition-all"
+                        >
+                          Sign in with Another Gmail (Bypasses Error 403)
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-3">

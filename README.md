@@ -29,8 +29,8 @@ A production-grade, offline-first library and study hall management system built
      - `Lakshay_Library_Master/Automated_Logs/` for real-time active client presence (`active_clients_status.json`) and automated crash diagnostics (`crash_and_error_logs.json`).
 6. **App Launch & Gesture-Based Exit Confirmation Animations**:
    - Branded launch splash animation (`AppLaunchSplash`) on startup and an interactive Exit Confirmation dialog (`ExitAppModal`) with a farewell animation triggered when the user performs an Android Back gesture or edge back-swipe on the home screen.
-7. **Native Mobile Ergonomics & Design (`v2.0.2` Production Release)**:
-   - Swipe-to-switch gestures between navigation tabs, custom warm-toned empty state illustrations, zero pre-populated demo records (`0` students on clean install), cross-account Google Drive folder sharing, and a left-sliding Navigation Drawer with embedded GitHub version link (`v2.0.2`).
+7. **Native Mobile Ergonomics & Design (`v2.0.3` Production Release)**:
+   - Swipe-to-switch gestures between navigation tabs, custom warm-toned empty state illustrations, zero pre-populated demo records (`0` students on clean install), 1-tap Master Sync Key for cross-account sharing, and a left-sliding Navigation Drawer with embedded GitHub version link (`v2.0.3`).
 
 ---
 
@@ -52,8 +52,8 @@ A production-grade, offline-first library and study hall management system built
 │   └── index.css               # Tailwind CSS imports & custom slide animations
 ├── capacitor.config.json       # Capacitor Android configuration (com.lakshaylibrary.app)
 ├── CHANGELOG.md                # Version history & direct APK release links
-├── ENGINEERING_LOG.md          # Post-mortem log of all 9 engineering & security fixes
-├── package.json                # Dependencies & build scripts (v2.0.2)
+├── ENGINEERING_LOG.md          # Post-mortem log of all 10 engineering & security fixes
+├── package.json                # Dependencies & build scripts (v2.0.3)
 └── vite.config.ts              # Vite bundler configuration
 ```
 
@@ -71,14 +71,14 @@ Lakshay Library uses a **Primary (Master Writer)** and **Secondary (Read-Only Fo
    - Open the **3-bar menu (`☰`)** → **Google Drive Daily Sync & Primary Role**.
    - Select **Secondary Phone**, sign in with the **same Google account**, and tap **Pull Daily Snapshot from Primary**.
 
-### Scenario B: Using a **Different Gmail Account** on the Secondary Phone
-1. **On the Primary Phone (`owner@gmail.com`)**:
-   - Open **Google Drive Daily Sync & Primary Role** and ensure you have pushed at least one snapshot so `Lakshay_Library_Master` exists.
-   - Under **"Using a Different Gmail on Secondary Phone?"**, enter the Secondary phone's Gmail address (e.g., `partner@gmail.com`) and tap **Grant Access** *(or share the `Lakshay_Library_Master` folder with Viewer access in the Google Drive app)*.
-2. **On the Secondary Phone (`partner@gmail.com`)**:
+### Scenario B: Using a **Different Gmail Account** on the Secondary Phone (No `Error 403` Block)
+1. **On the Primary Phone**:
+   - Open **Google Drive Daily Sync & Primary Role** and tap **Push Primary Snapshot to Drive** once.
+   - Under **Section 1 ("Share with Secondary Phone")**, tap **Copy Sync Key** and send that key to your Secondary Phone (e.g. via WhatsApp).
+2. **On the Secondary Phone**:
    - Open **Google Drive Daily Sync & Primary Role** and switch the role to **Secondary Phone**.
-   - Tap **Sign in with Google** and sign in with the **Secondary Gmail account (`partner@gmail.com`)**.
-   - The app automatically searches Google Drive's **"Shared with me"** items, finds `Lakshay_Library_Master_Sync.json` shared by the Primary account, and lets you tap **Pull Daily Snapshot from Primary** immediately.
+   - Paste the **Master Sync Key** into the box in **Section 1** and tap **Pull via Sync Key** (you can also sign in with your other Gmail using **Sign in with Another Gmail (Bypasses Error 403)**).
+   - *(Optional for Cloud Console Admin)*: To allow any Gmail account to use full Google Drive OAuth without adding individual test users, open [Google Cloud OAuth Audience (`gen-lang-client-0586032146`)](https://console.cloud.google.com/auth/audience?project=gen-lang-client-0586032146) and click **Publish App**.
 
 ---
 
@@ -115,9 +115,9 @@ Lakshay Library uses a **Primary (Master Writer)** and **Secondary (Read-Only Fo
 ### Option 1: Direct 1-Click APK Download from GitHub Releases (Recommended)
 Every tagged version of this app includes a pre-compiled `.apk` attached directly to **[GitHub Releases](https://github.com/keshav-sharp/lakshay-library-management/releases)**:
 
-- **Direct Latest APK URL (`v2.0.2`)**:  
+- **Direct Latest APK URL (`v2.0.3`)**:  
   👉 **[`https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk`](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
-- **All Version Releases (`v1.0.0` – `v2.0.2`)**:  
+- **All Version Releases (`v1.0.0` – `v2.0.3`)**:  
   👉 **[`https://github.com/keshav-sharp/lakshay-library-management/releases`](https://github.com/keshav-sharp/lakshay-library-management/releases)**
 
 ### Option 2: Download from GitHub Actions Build Artifacts
@@ -158,7 +158,7 @@ This app is a certified Progressive Web App (PWA):
 Curious about the technical challenges we solved while building this app across Web (PWA) and Android (`.apk`)? We maintain a full post-mortem log and closed issue tracker covering every bug, root cause, and architectural fix:
 
 - 📖 **[Read the Full `ENGINEERING_LOG.md`](ENGINEERING_LOG.md)**
-- 🐛 **[Browse Resolved GitHub Issues (`#1` – `#9`)](https://github.com/keshav-sharp/lakshay-library-management/issues?q=is%3Aissue+is%3Aclosed)**
+- 🐛 **[Browse Resolved GitHub Issues (`#1` – `#10`)](https://github.com/keshav-sharp/lakshay-library-management/issues?q=is%3Aissue+is%3Aclosed)**
 
 | Issue | Category | Summary of Challenge & Fix | Fixed In |
 | :--- | :--- | :--- | :--- |
@@ -171,6 +171,7 @@ Curious about the technical challenges we solved while building this app across 
 | **[#7](https://github.com/keshav-sharp/lakshay-library-management/issues/7)** | Native Gestures | Replaced menu-based exit button with native Android `OnBackPressedDispatcher` gesture interception & exit confirmation animation | `v2.0.1` |
 | **[#8](https://github.com/keshav-sharp/lakshay-library-management/issues/8)** | Security (CodeQL) | Resolved CodeQL High-severity alert (`CWE-312`) by keeping OAuth access tokens strictly in memory instead of `localStorage` | `v2.0.1` |
 | **[#9](https://github.com/keshav-sharp/lakshay-library-management/issues/9)** | Cross-Account Sync | Enabled Secondary phones signed in with a different Gmail to pull `Lakshay_Library_Master` via 1-tap Drive sharing & "Shared with me" discovery | `v2.0.2` |
+| **[#10](https://github.com/keshav-sharp/lakshay-library-management/issues/10)** | OAuth `Error 403` Fix | Resolved `Error 403: access_denied` on secondary Gmail accounts by removing restricted `drive.readonly` scope & adding **1-Tap Master Sync Key Pull** | `v2.0.3` |
 
 ---
 
@@ -178,9 +179,9 @@ Curious about the technical challenges we solved while building this app across 
 
 | Channel | Direct Link | Description |
 | :--- | :--- | :--- |
-| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v2.0.2)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
-| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v2.0.2`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
-| **Engineering Issues & Fixes Log** | 🛠️ **[View `ENGINEERING_LOG.md`](ENGINEERING_LOG.md)** | Root-cause analysis and fixes for all 9 engineering & security challenges solved during development. |
+| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v2.0.3)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
+| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v2.0.3`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
+| **Engineering Issues & Fixes Log** | 🛠️ **[View `ENGINEERING_LOG.md`](ENGINEERING_LOG.md)** | Root-cause analysis and fixes for all 10 engineering & security challenges solved during development. |
 | **Full Changelog** | 📜 **[View `CHANGELOG.md`](CHANGELOG.md)** | Detailed version-by-version history of features, fixes, and improvements. |
 
 ---

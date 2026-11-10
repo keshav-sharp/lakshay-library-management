@@ -6,10 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v2.0.3] - 2026-11-10 (Fix `Error 403: access_denied` for Secondary Gmail Accounts & Master Sync Key)
+
+### Direct APK Download
+- 📦 **[Download `LakshayLibrary-v2.0.3.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 🔗 **[View Release Notes on GitHub (`v2.0.3`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v2.0.3)**
+
+### Fixed & Added
+- **Resolved `Error 403: access_denied` (`has not completed the Google verification process`) on Secondary Accounts**:
+  - Removed the restricted `https://www.googleapis.com/auth/drive.readonly` OAuth scope from `SCOPES` in `src/services/googleDriveSyncService.ts` (which triggered Google's unverified-app block for non-owner Gmail accounts).
+  - Added a **"Sign in with Another Gmail (Bypasses Error 403)"** mode on Secondary phones that requests only standard identity scopes (`email`, `profile`).
+  - Added **1-Tap Master Sync Key Copy & Pull (`enableAnyoneReaderPermission` + API Key Fallback)** so the Primary Phone generates a Master Sync Key (`lastDriveFileId`) that any Secondary Phone can paste and pull with **1 tap (`Pull via Sync Key`)** — even without Google OAuth verification!
+  - Added a direct in-app link to **Google Cloud OAuth Audience (`gen-lang-client-0586032146`)** to publish the consent screen or add test users in 1 click.
+
+---
+
 ## [v2.0.2] - 2026-11-10 (Cross-Account Gmail Sharing & In-App Sync Guide)
 
 ### Direct APK Download
-- 📦 **[Download `LakshayLibrary-v2.0.2.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 📦 **[Download `LakshayLibrary-v2.0.2.apk`](https://github.com/keshav-sharp/lakshay-library-management/releases/download/v2.0.2/LakshayLibrary-v2.0.2.apk)**
 - 🔗 **[View Release Notes on GitHub (`v2.0.2`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v2.0.2)**
 
 ### Added & Improved
