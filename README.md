@@ -37,20 +37,48 @@ A production-grade, offline-first library and study hall management system built
 ## 📂 Project Architecture
 
 ```tree
-├── public/                 # App icons, illustrations & PWA manifest
+├── public/                     # App icons, illustrations & PWA manifest
+├── scripts/
+│   └── apply-android-icon.cjs  # Capacitor Android icon, WebView OAuth & back-gesture patcher
 ├── src/
-│   ├── components/         # Modular React UI components, modals & lifecycle animations
-│   ├── context/            # Theme & state management context
-│   ├── data/               # Production defaults & shift configurations
-│   ├── services/           # Storage, export, Google Drive sync, and backup engines
-│   ├── types/              # TypeScript interfaces (Student, Shift, Seat, Theme)
-│   ├── App.tsx             # Root application component & touch gesture handler
-│   ├── main.tsx            # React DOM entry point
-│   └── index.css           # Tailwind CSS imports & custom slide animations
-├── capacitor.config.json   # Capacitor Android configuration (com.lakshaylibrary.app)
-├── package.json            # Dependencies & build scripts (v2.0.2)
-└── vite.config.ts          # Vite bundler configuration
+│   ├── components/             # Modular React UI components, modals & lifecycle animations
+│   ├── config/                 # Firebase & Google OAuth configuration
+│   ├── context/                # Theme & state management context
+│   ├── data/                   # Production defaults & shift configurations
+│   ├── services/               # Storage, export, Google Drive sync, presence & crash logs
+│   ├── types/                  # TypeScript interfaces (Student, Shift, Seat, Theme)
+│   ├── App.tsx                 # Root application component & gesture navigation handler
+│   ├── main.tsx                # React DOM entry point
+│   └── index.css               # Tailwind CSS imports & custom slide animations
+├── capacitor.config.json       # Capacitor Android configuration (com.lakshaylibrary.app)
+├── CHANGELOG.md                # Version history & direct APK release links
+├── ENGINEERING_LOG.md          # Post-mortem log of all 9 engineering & security fixes
+├── package.json                # Dependencies & build scripts (v2.0.2)
+└── vite.config.ts              # Vite bundler configuration
 ```
+
+---
+
+## ☁️ Multi-Phone Google Drive Sync Guide (`Lakshay_Library_Master`)
+
+Lakshay Library uses a **Primary (Master Writer)** and **Secondary (Read-Only Follower)** device model so multiple phones can stay in sync without overwriting each other's student records.
+
+### Scenario A: Using the **Same Gmail Account** on Both Phones
+1. **On the Primary Phone**:
+   - Open the **3-bar menu (`☰`)** → **Google Drive Daily Sync & Primary Role**.
+   - Select **Primary Phone**, sign in with your Google account, and tap **Push Primary Snapshot to Drive**.
+2. **On the Secondary Phone**:
+   - Open the **3-bar menu (`☰`)** → **Google Drive Daily Sync & Primary Role**.
+   - Select **Secondary Phone**, sign in with the **same Google account**, and tap **Pull Daily Snapshot from Primary**.
+
+### Scenario B: Using a **Different Gmail Account** on the Secondary Phone
+1. **On the Primary Phone (`owner@gmail.com`)**:
+   - Open **Google Drive Daily Sync & Primary Role** and ensure you have pushed at least one snapshot so `Lakshay_Library_Master` exists.
+   - Under **"Using a Different Gmail on Secondary Phone?"**, enter the Secondary phone's Gmail address (e.g., `partner@gmail.com`) and tap **Grant Access** *(or share the `Lakshay_Library_Master` folder with Viewer access in the Google Drive app)*.
+2. **On the Secondary Phone (`partner@gmail.com`)**:
+   - Open **Google Drive Daily Sync & Primary Role** and switch the role to **Secondary Phone**.
+   - Tap **Sign in with Google** and sign in with the **Secondary Gmail account (`partner@gmail.com`)**.
+   - The app automatically searches Google Drive's **"Shared with me"** items, finds `Lakshay_Library_Master_Sync.json` shared by the Primary account, and lets you tap **Pull Daily Snapshot from Primary** immediately.
 
 ---
 
