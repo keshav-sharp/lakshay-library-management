@@ -227,16 +227,16 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
   return (
     <div className={`fixed inset-0 z-50 flex items-end sm:items-stretch sm:justify-end bg-slate-950/55 backdrop-blur-xs animate-in fade-in duration-200 text-slate-900 ${darkModeClass}`} onClick={onClose}>
       <div 
-        className="bg-white text-slate-900 w-full sm:max-w-xl h-[92vh] sm:h-full rounded-t-3xl sm:rounded-t-none sm:rounded-l-3xl shadow-2xl border-t sm:border-t-0 sm:border-l border-slate-200/60 overflow-hidden flex flex-col animate-in slide-in-from-bottom sm:slide-in-from-right duration-200"
+        className="bg-white text-slate-900 w-full max-w-full sm:max-w-xl h-[92vh] sm:h-full rounded-t-3xl sm:rounded-t-none sm:rounded-l-3xl shadow-2xl border-t sm:border-t-0 sm:border-l border-slate-200/60 overflow-hidden flex flex-col min-w-0 animate-in slide-in-from-bottom sm:slide-in-from-right duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className={`px-6 py-4 border-b border-slate-100 flex items-center justify-between ${theme.headerBg} text-white`}>
-          <div>
-            <h2 className="text-lg font-bold text-white">
+        <div className={`px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 flex items-center justify-between ${theme.headerBg} text-white min-w-0`}>
+          <div className="min-w-0 truncate">
+            <h2 className="text-base sm:text-lg font-bold text-white truncate">
               Add New Student
             </h2>
-            <p className="text-xs text-white/80 mt-0.5">
+            <p className="text-[11px] sm:text-xs text-white/80 mt-0.5 truncate">
               Assign desk, shift timing &amp; monthly fee
             </p>
           </div>
@@ -244,7 +244,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-white/70 hover:text-white rounded-full hover:bg-white/10 transition-colors"
+            className="p-1.5 text-white/70 hover:text-white rounded-full hover:bg-white/10 transition-colors shrink-0 touch-manipulation"
           >
             <X className="w-5 h-5" />
           </button>
@@ -252,7 +252,7 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
 
         {/* Modal Body */}
         {activeTab === 'form' ? (
-          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
+          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 space-y-4 min-w-0 max-w-full">
             {successAnimation && (
               <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3.5 rounded-2xl flex items-center gap-3 animate-in zoom-in-95">
                 <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0">

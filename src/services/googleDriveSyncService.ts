@@ -21,6 +21,7 @@ import {
 } from './storageService';
 import { getStoredShifts, saveStoredShifts } from './shiftService';
 import { getStoredSeats, saveStoredSeats } from './seatService';
+import { getStoredUpiConfig, saveUpiConfig } from './upiConfigService';
 
 // Use only the non-sensitive `drive.file` scope (never `drive.readonly`, which is a Restricted scope
 // that triggers Google's Error 403: access_denied verification block).
@@ -95,6 +96,7 @@ export interface MasterSyncPayload {
     dailyAttendance: ReturnType<typeof getStoredDailyAttendance>;
     shifts: ReturnType<typeof getStoredShifts>;
     seats: ReturnType<typeof getStoredSeats>;
+    upiConfig?: ReturnType<typeof getStoredUpiConfig>;
   };
 }
 
@@ -597,6 +599,7 @@ export const buildCurrentMasterSyncPayload = (): MasterSyncPayload => {
       dailyAttendance: getStoredDailyAttendance(),
       shifts: getStoredShifts(),
       seats: getStoredSeats(),
+      upiConfig: getStoredUpiConfig(),
     },
   };
 };
@@ -855,6 +858,14 @@ export const applyMasterSyncPayloadLocally = (
   }
   if (Array.isArray(payload.data.seats) && payload.data.seats.length > 0) {
     saveStoredSeats(payload.data.seats);
+  }
+  if (
+    payload.data.upiConfig &&
+    (payload.data.upiConfig.upiId ||
+      payload.data.upiConfig.customQrImageUrl ||
+      payload.data.upiConfig.isConfigured)
+  ) {
+    saveUpiConfig(payload.data.upiConfig);
   }
 
   const now = new Date();

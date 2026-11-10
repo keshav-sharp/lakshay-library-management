@@ -193,30 +193,30 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   return (
     <div className={`fixed inset-0 z-50 flex items-end sm:items-stretch sm:justify-end bg-slate-950/55 backdrop-blur-xs animate-in fade-in duration-200 ${darkModeClass}`} onClick={onClose}>
       <div 
-        className="bg-white w-full sm:max-w-xl h-[92vh] sm:h-full rounded-t-3xl sm:rounded-t-none sm:rounded-l-3xl shadow-2xl border-t sm:border-t-0 sm:border-l border-slate-200/60 overflow-hidden flex flex-col animate-in slide-in-from-bottom sm:slide-in-from-right duration-200"
+        className="bg-white w-full max-w-full sm:max-w-xl h-[92vh] sm:h-full rounded-t-3xl sm:rounded-t-none sm:rounded-l-3xl shadow-2xl border-t sm:border-t-0 sm:border-l border-slate-200/60 overflow-hidden flex flex-col min-w-0 animate-in slide-in-from-bottom sm:slide-in-from-right duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-amber-50/50">
-          <div className="flex items-center gap-3">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-amber-50/50 min-w-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 -ml-1 text-slate-500 hover:text-slate-800 rounded-full hover:bg-slate-200/60 transition-colors"
+              className="p-1.5 -ml-1 text-slate-500 hover:text-slate-800 rounded-full hover:bg-slate-200/60 transition-colors shrink-0 touch-manipulation"
               title="Back to students list"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-slate-900">{student.name}</h2>
-                <span className="px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-amber-100 text-amber-800 border border-amber-200">
+            <div className="min-w-0 truncate">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">{student.name}</h2>
+                <span className="px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
                   Seat {student.seatNumber}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                <Phone className="w-3 h-3 text-slate-400" />
-                <span>{student.phoneNumber}</span>
+              <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5 truncate">
+                <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                <span className="truncate">{student.phoneNumber}</span>
               </p>
             </div>
           </div>
@@ -224,14 +224,14 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100"
+            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 shrink-0 touch-manipulation"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {activeTab === 'details' ? (
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 space-y-5 min-w-0 max-w-full">
             {/* Core Info Summary Card */}
             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">

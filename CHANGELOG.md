@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v2.0.7] - 2026-11-10 (Mobile Viewport Optimization, Dedicated Help & FAQ Center, Color Palette in Settings, Cross-Device UPI Sync & Security Policy)
+
+### Direct APK Download
+- 📦 **[Download `LakshayLibrary-v2.0.7.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 🔗 **[View Release Notes on GitHub (`v2.0.7`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v2.0.7)**
+
+### Added & Improved
+- **Zero Horizontal Scroll & Mobile Viewport Optimization**:
+  - Enforced strict global viewport containment (`width: 100%`, `max-width: 100vw`, `overflow-x: hidden`, `-webkit-overflow-scrolling: touch`) across `html`, `body`, `#root`, and main modal containers.
+  - Eliminated mobile horizontal overflow and `< [=======] >` side-scrollbars across screens ($375\text{px}$–$430\text{px}$).
+  - Redesigned Top App Bar into an ergonomic 2-row layout on mobile devices: Row 1 holds Menu button, library brand logo/title, and overdue alert badge; Row 2 holds full-width quick global search.
+  - Formatted KPI summary metrics into a responsive 2x2 touch-friendly card grid with zero text clipping.
+- **Dedicated Help & FAQ Documentation Center (`HelpFaqModal`)**:
+  - Created a centralized, searchable Help & FAQ Center accessible via the side Navigation Drawer and modal headers.
+  - Categorized guides for **Sync**, **UPI & Standee**, **Seats & Desks**, **Shifts & Pricing**, **Attendance & QR**, and **Reminders & Backups**.
+  - De-cluttered modals across the app, replacing dense inline instructional paragraphs with clean 1-line guidance and contextual `(?) FAQ` quick links.
+- **Color Palette Reorganization Under Settings**:
+  - Moved standalone "Color Palette" menu item into **Settings & Appearance** (`SettingsModal`), streamlining the primary navigation drawer.
+- **Cross-Device UPI & Reception Standee Sync**:
+  - Added UPI configuration (`upiConfig`) directly to `MasterSyncPayload`.
+  - Updating the library UPI ID, payee name, or reception standee photo on the Primary phone now triggers instant debounced live auto-sync (`triggerLiveAutoSync(300)`).
+  - Connected secondary and consecutive peer devices receive and update UPI credentials and standee images immediately via real-time sync subscription (`subscribeToUpiConfig`).
+- **Official GitHub Security Policy (`SECURITY.md`)**:
+  - Established formal GitHub Security Policy in `SECURITY.md` and `.github/SECURITY.md` supporting `v2.0.x`, outlining private vulnerability reporting procedures, response timelines, and defensive architecture.
+
+---
+
 ## [v2.0.6] - 2026-11-10 (Vice-Versa Real-Time Multi-Device Consecutive Sync)
 
 ### Direct APK Download

@@ -29,8 +29,14 @@ A production-grade, offline-first library and study hall management system built
      - `Lakshay_Library_Master/Automated_Logs/` for real-time active client presence (`active_clients_status.json`) and automated crash diagnostics (`crash_and_error_logs.json`).
 6. **App Launch & Gesture-Based Exit Confirmation Animations**:
    - Branded launch splash animation (`AppLaunchSplash`) on startup and an interactive Exit Confirmation dialog (`ExitAppModal`) with a farewell animation triggered when the user performs an Android Back gesture or edge back-swipe on the home screen.
-7. **Native Mobile Ergonomics & Vice-Versa Real-Time Sync (`v2.0.6` Production Release)**:
-   - Real-time active-state bidirectional auto-sync between Primary, Secondary, and third consecutive devices (vice-versa sync), cross-device client session presence & secondary crash logs capture, swipe-to-switch gestures between navigation tabs, custom warm-toned empty state illustrations, zero pre-populated demo records (`0` students on clean install), 1-tap `LK-...` Cloud Relay & `LKSYNC1:...` Offline Master Sync Keys for cross-account sharing, and a left-sliding Navigation Drawer with embedded GitHub version link (`v2.0.6`).
+7. **Native Mobile Ergonomics & Viewport Containment (`v2.0.7` Production Release)**:
+   - Strict zero-horizontal-scroll viewport containment (`overflow-x: hidden`), ergonomic 2-row mobile top bar, responsive 2x2 metric cards, and dedicated touch spacing.
+8. **Dedicated Help & FAQ Documentation Center (`HelpFaqModal`)**:
+   - Centralized searchable documentation center covering Multi-Device Sync, UPI payments, seats, shifts, attendance QR, and backups, eliminating cluttered inline modal text.
+9. **Cross-Device Reception UPI ID & Standee Sync**:
+   - Automatically synchronizes UPI ID, payee name, and custom reception standee image across all primary, secondary, and peer devices in real-time.
+10. **GitHub Security Policy & Threat Model (`SECURITY.md`)**:
+    - Complete private vulnerability disclosure policy supporting `2.0.x` with 48h SLA and sandboxed architecture.
 
 ---
 
@@ -42,6 +48,7 @@ A production-grade, offline-first library and study hall management system built
 │   └── apply-android-icon.cjs  # Capacitor Android icon, WebView OAuth & back-gesture patcher
 ├── src/
 │   ├── components/             # Modular React UI components, modals & lifecycle animations
+│   │   └── HelpFaqModal.tsx    # Dedicated searchable Help & Documentation Center
 │   ├── config/                 # Firebase & Google OAuth configuration
 │   ├── context/                # Theme & state management context
 │   ├── data/                   # Production defaults & shift configurations
@@ -50,10 +57,14 @@ A production-grade, offline-first library and study hall management system built
 │   ├── App.tsx                 # Root application component & gesture navigation handler
 │   ├── main.tsx                # React DOM entry point
 │   └── index.css               # Tailwind CSS imports & custom slide animations
+├── .github/
+│   ├── workflows/build-apk.yml # Untouched Android APK build CI/CD workflow
+│   └── SECURITY.md             # GitHub-standard security vulnerability reporting policy
+├── SECURITY.md                 # Root security policy
 ├── capacitor.config.json       # Capacitor Android configuration (com.lakshaylibrary.app)
-├── CHANGELOG.md                # Version history & direct APK release links
-├── ENGINEERING_LOG.md          # Post-mortem log of all 10 engineering & security fixes
-├── package.json                # Dependencies & build scripts (v2.0.3)
+├── CHANGELOG.md                # Version history & direct APK release links (v2.0.7)
+├── ENGINEERING_LOG.md          # Post-mortem log of all 14 engineering & security fixes
+├── package.json                # Dependencies & build scripts (v2.0.7)
 └── vite.config.ts              # Vite bundler configuration
 ```
 

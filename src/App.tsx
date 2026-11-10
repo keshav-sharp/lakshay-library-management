@@ -33,6 +33,7 @@ import { MetricsHeaderSkeleton, StudentListSkeleton } from './components/Dashboa
 import { ApkExportModal } from './components/ApkExportModal';
 import { GoogleDriveSyncModal } from './components/GoogleDriveSyncModal';
 import { UpiPaymentQrModal } from './components/UpiPaymentQrModal';
+import { HelpFaqModal } from './components/HelpFaqModal';
 import { AppLaunchSplash, ExitAppModal } from './components/AppLifecycleAnimations';
 import { initClientPresenceEngine } from './services/clientPresenceService';
 import { addBreadcrumb } from './services/crashLogService';
@@ -167,6 +168,13 @@ export default function App() {
   const [isGoogleDriveSyncOpen, setIsGoogleDriveSyncOpen] = useState(false);
   const [isUpiPaymentQrOpen, setIsUpiPaymentQrOpen] = useState(false);
   const [isNotificationStatusOpen, setIsNotificationStatusOpen] = useState(false);
+  const [isHelpFaqOpen, setIsHelpFaqOpen] = useState(false);
+  const [helpFaqCategory, setHelpFaqCategory] = useState<'SYNC' | 'UPI' | 'SEATS' | 'SHIFTS' | 'ATTENDANCE' | 'REMINDERS' | 'ALL'>('ALL');
+
+  const handleOpenHelpFaq = (category: 'SYNC' | 'UPI' | 'SEATS' | 'SHIFTS' | 'ATTENDANCE' | 'REMINDERS' | 'ALL' = 'ALL') => {
+    setHelpFaqCategory(category);
+    setIsHelpFaqOpen(true);
+  };
 
   // Multi-select & Bulk Reminders state
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -241,6 +249,8 @@ export default function App() {
         setIsUpiPaymentQrOpen(false);
       } else if (isNotificationStatusOpen) {
         setIsNotificationStatusOpen(false);
+      } else if (isHelpFaqOpen) {
+        setIsHelpFaqOpen(false);
       } else {
         // On root screen: prompt Exit Confirmation & Exit Animation when user tries to exit by gesture
         setIsExitModalOpen(true);
@@ -318,6 +328,7 @@ export default function App() {
     isGoogleDriveSyncOpen,
     isUpiPaymentQrOpen,
     isNotificationStatusOpen,
+    isHelpFaqOpen,
   ]);
 
   // Subscriptions & Initial Hydration
@@ -691,36 +702,55 @@ export default function App() {
     <div
       className={`flex flex-col h-full w-full bg-slate-50 text-slate-800 relative overflow-hidden transition-colors duration-200 ${darkModeClass}`}
     >
-      {/* 1. Clean Top App Bar: Menu Icon, Brand Title, Global Search & Due Notification Indicator */}
-      <header className="bg-white/95 backdrop-blur-md border-b border-slate-200/60 px-4 py-3 sm:px-6 shrink-0 z-10 transition-colors duration-200">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
-          {/* Left: Hamburger Menu Icon & Title */}
-          <div className="flex items-center gap-2.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => setIsDrawerOpen(true)}
-              aria-label="Open Navigation Drawer"
-              title="Open Menu"
-              className="w-9 h-9 rounded-xl bg-slate-100/80 hover:bg-slate-200/70 active:scale-95 flex items-center justify-center shrink-0 border border-slate-200/60 text-slate-700 transition-all"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-xs border border-amber-500/30 flex items-center justify-center shrink-0">
-              <img src="/app-icon.png" alt="Lakshay Library" className="w-full h-full object-cover" />
+      {/* 1. Clean Top App Bar: Responsive 2-Row on Mobile, Single Row on Desktop */}
+      <header className="bg-white/95 backdrop-blur-md border-b border-slate-200/60 px-3.5 py-2.5 sm:px-6 sm:py-3 shrink-0 z-10 transition-colors duration-200">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3">
+          {/* Top row on mobile / Left group on desktop */}
+          <div className="flex items-center justify-between sm:justify-start gap-2.5 min-w-0 w-full sm:w-auto">
+            {/* Hamburger Menu Icon & Title */}
+            <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+              <button
+                type="button"
+                onClick={() => setIsDrawerOpen(true)}
+                aria-label="Open Navigation Drawer"
+                title="Open Menu"
+                className="w-9 h-9 rounded-xl bg-slate-100/80 hover:bg-slate-200/70 active:scale-95 flex items-center justify-center shrink-0 border border-slate-200/60 text-slate-700 transition-all touch-manipulation"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden shadow-2xs border border-amber-500/30 flex items-center justify-center shrink-0">
+                <img src="/app-icon.png" alt="Lakshay Library" className="w-full h-full object-cover" />
+              </div>
+              <div className="min-w-0 truncate">
+                <h1 className="text-sm sm:text-base font-bold tracking-tight text-slate-900 leading-tight truncate">
+                  Lakshay Library
+                </h1>
+                <p className="text-[10px] sm:text-[11px] text-slate-500 truncate">
+                  Study Hall Management
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-sm sm:text-base font-bold tracking-tight text-slate-900 leading-tight">
-                Lakshay Library
-              </h1>
-              <p className="text-[11px] text-slate-500">
-                Study Hall Management
-              </p>
+
+            {/* Mobile-only Notification Bell Button */}
+            <div className="flex sm:hidden items-center shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsNotificationStatusOpen(true)}
+                className="px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 border border-amber-500/30 transition-colors flex items-center gap-1.5 text-xs font-bold shrink-0 touch-manipulation"
+                title="Due & Overdue Alerts"
+              >
+                <Bell className="w-3.5 h-3.5 text-amber-600" />
+                <span className="font-mono text-xs font-bold text-amber-900">
+                  {counts.overdue + counts.dueSoon}
+                </span>
+                <span className="text-[10px] text-amber-700 font-medium">Alerts</span>
+              </button>
             </div>
           </div>
 
-          {/* Center: Quick Global Search Bar & Search Header Sort Dropdown */}
-          <div className="flex-1 max-w-md flex items-center gap-2">
-            <div className="relative flex-1">
+          {/* Quick Global Search Bar & Desktop Header Sort Dropdown */}
+          <div className="flex-1 max-w-full sm:max-w-md flex items-center gap-2 min-w-0 w-full">
+            <div className="relative flex-1 min-w-0">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
@@ -733,7 +763,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 hover:text-slate-600"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 w-5 h-5 flex items-center justify-center"
                 >
                   &times;
                 </button>
@@ -760,8 +790,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right: Notification Indicator */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          {/* Desktop-only Notification Indicator */}
+          <div className="hidden sm:flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={() => setIsNotificationStatusOpen(true)}
@@ -779,32 +809,32 @@ export default function App() {
       <main
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        className="flex-1 overflow-y-auto p-4 sm:p-6 pb-24"
+        className="flex-1 overflow-y-auto overflow-x-hidden p-3.5 sm:p-6 pb-28 min-w-0 max-w-full"
       >
-        <div className="max-w-6xl mx-auto space-y-4 sm:space-y-5">
+        <div className="max-w-6xl mx-auto space-y-4 sm:space-y-5 min-w-0 w-full">
         {/* 2. Unified KPI Metrics Header Bar with Subtle Divider Lines (or Shimmer Skeleton while fetching) */}
         {isInitialFetching ? (
           <MetricsHeaderSkeleton />
         ) : (
-          <section className="bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-md transition-shadow grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-200/60 overflow-hidden">
-            <div className="p-3.5 sm:p-4">
-              <span className="block text-xs uppercase tracking-wider font-semibold text-slate-500">
+          <section className="bg-white rounded-2xl border border-slate-200/60 shadow-xs hover:shadow-md transition-shadow grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-200/60 overflow-hidden min-w-0 w-full">
+            <div className="p-3 sm:p-4 border-r border-slate-200/60 sm:border-r-0">
+              <span className="block text-[10px] sm:text-xs uppercase tracking-wider font-semibold text-slate-500">
                 Active Students
               </span>
               <div className="mt-1 flex items-baseline justify-between">
                 <span className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight font-mono">
                   {counts.total}
                 </span>
-                <span className="text-[11px] font-medium text-emerald-600">Enrolled</span>
+                <span className="text-[10px] sm:text-[11px] font-medium text-emerald-600">Enrolled</span>
               </div>
             </div>
 
             <div
               onClick={() => setIsSeatMatrixOpen(true)}
-              className="p-3.5 sm:p-4 cursor-pointer hover:bg-slate-50/70 transition-colors"
+              className="p-3 sm:p-4 cursor-pointer hover:bg-slate-50/70 transition-colors"
               title="Click to open Minimalist Desk Matrix"
             >
-              <span className="block text-xs uppercase tracking-wider font-semibold text-slate-500">
+              <span className="block text-[10px] sm:text-xs uppercase tracking-wider font-semibold text-slate-500">
                 Total Desks Occupied
               </span>
               <div className="mt-1 flex items-baseline justify-between">
@@ -812,28 +842,28 @@ export default function App() {
                   {counts.total}
                   <span className="text-xs font-normal text-slate-400">/{seats.length}</span>
                 </span>
-                <span className="text-[11px] font-semibold text-amber-600">
+                <span className="text-[10px] sm:text-[11px] font-semibold text-amber-600">
                   {Math.max(0, seats.length - counts.total)} free
                 </span>
               </div>
             </div>
 
-            <div className="p-3.5 sm:p-4">
-              <span className="block text-xs uppercase tracking-wider font-semibold text-slate-500">
+            <div className="p-3 sm:p-4 border-r border-slate-200/60 sm:border-r-0">
+              <span className="block text-[10px] sm:text-xs uppercase tracking-wider font-semibold text-slate-500">
                 Pending Dues
               </span>
               <div className="mt-1 flex items-baseline justify-between">
                 <span className="text-lg sm:text-xl font-bold text-amber-600 tracking-tight font-mono">
                   {counts.overdue + counts.dueSoon}
                 </span>
-                <span className="text-[11px] font-medium text-rose-600">
+                <span className="text-[10px] sm:text-[11px] font-medium text-rose-600">
                   {counts.overdue} overdue
                 </span>
               </div>
             </div>
 
-            <div className="p-3.5 sm:p-4">
-              <span className="block text-xs uppercase tracking-wider font-semibold text-slate-500">
+            <div className="p-3 sm:p-4">
+              <span className="block text-[10px] sm:text-xs uppercase tracking-wider font-semibold text-slate-500">
                 Monthly Run-Rate
               </span>
               <div className="mt-1 flex items-baseline justify-between">
@@ -843,7 +873,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleResetData}
-                  className="text-[11px] text-slate-400 hover:text-amber-600 inline-flex items-center gap-0.5 transition-colors"
+                  className="text-[11px] text-slate-400 hover:text-amber-600 inline-flex items-center gap-0.5 transition-colors p-1"
                   title="Refresh Firestore snapshot & replay shimmer skeleton"
                 >
                   <RotateCcw className="w-3 h-3" />
@@ -960,7 +990,7 @@ export default function App() {
         {/* Animated Tab Content Container with Subtle Horizontal Slide Transition */}
         <div
           key={activeTab}
-          className={`space-y-4 sm:space-y-5 ${
+          className={`space-y-4 sm:space-y-5 min-w-0 max-w-full overflow-x-hidden ${
             tabDirection === 'right' ? 'animate-tab-slide-right' : 'animate-tab-slide-left'
           }`}
         >
@@ -1098,7 +1128,7 @@ export default function App() {
                       aria-label="Sort student list header"
                       value={sortOption}
                       onChange={(e) => setSortOption(e.target.value as StudentSortOption)}
-                      className="px-3 py-1 rounded-full border border-slate-200/60 bg-white text-[11px] font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 cursor-pointer shadow-2xs"
+                      className="px-3 py-1 rounded-full border border-slate-200/60 bg-white text-[11px] font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 cursor-pointer shadow-2xs max-w-[160px] sm:max-w-none truncate"
                     >
                       <option value="OVERDUE_PRIORITY">Overdue Priority (Most Overdue First)</option>
                       <option value="NAME_ASC">Name (A-Z)</option>
@@ -1235,6 +1265,7 @@ export default function App() {
         onOpenApkExport={() => setIsApkExportOpen(true)}
         onOpenWorkManager={() => setIsWorkManagerOpen(true)}
         onOpenGoogleDriveSync={() => setIsGoogleDriveSyncOpen(true)}
+        onOpenHelpFaq={() => handleOpenHelpFaq('ALL')}
       />
 
       {/* Frosted-Glass Pill Expandable '+ Actions' FAB Menu */}
@@ -1444,6 +1475,7 @@ export default function App() {
           onClose={() => setIsGoogleDriveSyncOpen(false)}
           students={students}
           onTriggerToast={triggerToast}
+          onOpenHelpFaq={(cat) => handleOpenHelpFaq(cat || 'SYNC')}
         />
 
         {/* 15. Reception UPI ID & Payment QR Standee Modal */}
@@ -1451,6 +1483,7 @@ export default function App() {
           isOpen={isUpiPaymentQrOpen}
           onClose={() => setIsUpiPaymentQrOpen(false)}
           onTriggerToast={triggerToast}
+          onOpenHelpFaq={(cat) => handleOpenHelpFaq(cat || 'UPI')}
         />
 
         {/* 16. Notification Alert Status Modal */}
@@ -1460,6 +1493,13 @@ export default function App() {
           students={students}
           onOpenWorkManager={() => setIsWorkManagerOpen(true)}
           onOpenGoogleDriveSync={() => setIsGoogleDriveSyncOpen(true)}
+        />
+
+        {/* 17. Help & Documentation (FAQ) Section Modal */}
+        <HelpFaqModal
+          isOpen={isHelpFaqOpen}
+          onClose={() => setIsHelpFaqOpen(false)}
+          initialCategory={helpFaqCategory}
         />
       </div>
     </div>

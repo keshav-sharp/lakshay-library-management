@@ -50,7 +50,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       onClick={onClose}
     >
       <div
-        className={`w-full sm:max-w-xl h-[90vh] sm:h-full rounded-t-3xl sm:rounded-t-none sm:rounded-l-3xl shadow-2xl border-t sm:border-t-0 sm:border-l overflow-hidden flex flex-col animate-in slide-in-from-bottom sm:slide-in-from-right duration-200 ${
+        className={`w-full max-w-full sm:max-w-xl h-[90vh] sm:h-full rounded-t-3xl sm:rounded-t-none sm:rounded-l-3xl shadow-2xl border-t sm:border-t-0 sm:border-l overflow-hidden flex flex-col min-w-0 animate-in slide-in-from-bottom sm:slide-in-from-right duration-200 ${
           isDarkMode
             ? 'bg-slate-900 border-slate-800/60 text-slate-100'
             : 'bg-white border-slate-200/60 text-slate-900'
@@ -58,17 +58,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200/60 bg-white flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200/60 bg-white flex items-center justify-between shrink-0 gap-2">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
               <Sliders className="w-5 h-5 text-amber-600" />
             </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-900 leading-tight tracking-tight">
+            <div className="min-w-0 truncate">
+              <h2 className="text-sm sm:text-base font-bold text-slate-900 leading-tight tracking-tight truncate">
                 Settings &amp; Appearance
               </h2>
-              <p className="text-xs text-slate-500">
-                Theme, shifts, seating &amp; library preferences
+              <p className="text-[11px] sm:text-xs text-slate-500 truncate">
+                Color themes, dark mode, shifts &amp; preferences
               </p>
             </div>
           </div>
@@ -76,13 +76,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0 touch-manipulation"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto overflow-x-hidden space-y-4 sm:space-y-5 flex-1 min-w-0 max-w-full">
           {/* 1. Global Dark Mode Toggle Card */}
           <div
             className={`p-4 rounded-2xl border transition-all ${

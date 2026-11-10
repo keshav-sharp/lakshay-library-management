@@ -3,9 +3,11 @@ import { useTheme } from '../context/ThemeContext';
 import {
   getStoredUpiConfig,
   saveUpiConfig,
+  subscribeToUpiConfig,
   getDynamicQrImageUrl,
   LibraryUpiConfig,
 } from '../services/upiConfigService';
+import { triggerLiveAutoSync } from '../services/googleDriveSyncService';
 import {
   X,
   QrCode,
@@ -21,18 +23,21 @@ import {
   ExternalLink,
   Edit3,
   Sparkles,
+  HelpCircle,
 } from 'lucide-react';
 
 interface UpiPaymentQrModalProps {
   isOpen: boolean;
   onClose: () => void;
   onTriggerToast: (msg: string) => void;
+  onOpenHelpFaq?: (category?: 'SYNC' | 'UPI' | 'SEATS' | 'SHIFTS' | 'ATTENDANCE' | 'REMINDERS') => void;
 }
 
 export const UpiPaymentQrModal: React.FC<UpiPaymentQrModalProps> = ({
   isOpen,
   onClose,
   onTriggerToast,
+  onOpenHelpFaq,
 }) => {
   const { darkModeClass, isDarkMode } = useTheme();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -62,7 +67,19 @@ export const UpiPaymentQrModal: React.FC<UpiPaymentQrModalProps> = ({
       setShowWarningDialog(false);
       setFormError('');
     }
-  }, [isOpen]);
+
+    const unsub = subscribeToUpiConfig((newConfig) => {
+      setConfig(newConfig);
+      if (!isEditing) {
+        setUpiIdInput(newConfig.upiId || '');
+        setPayeeNameInput(newConfig.payeeName || 'Lakshay Library');
+        setCustomQrImage(newConfig.customQrImageUrl || '');
+        setNotesInput(newConfig.notes || '');
+      }
+    });
+
+    return () => unsub();
+  }, [isOpen, isEditing]);
 
   if (!isOpen) return null;
 
@@ -150,7 +167,8 @@ export const UpiPaymentQrModal: React.FC<UpiPaymentQrModalProps> = ({
     setConfig(updated);
     setIsEditing(false);
     setFormError('');
-    onTriggerToast('✓ Library UPI & Payment QR details saved successfully!');
+    triggerLiveAutoSync(300);
+    onTriggerToast('✓ Library UPI & Payment QR saved and synced across all devices!');
   };
 
   const activeQrSrc = config.customQrImageUrl || (config.upiId ? getDynamicQrImageUrl(config.upiId, config.payeeName) : '');
@@ -162,38 +180,52 @@ export const UpiPaymentQrModal: React.FC<UpiPaymentQrModalProps> = ({
       onClick={onClose}
     >
       <div
-        className={`w-full max-w-lg rounded-3xl shadow-2xl border overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200 ${
+        className={`w-full max-w-lg rounded-3xl shadow-2xl border overflow-hidden flex flex-col max-h-[92vh] min-w-0 animate-in zoom-in-95 duration-200 ${
           isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200/60 text-slate-900'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200/60 flex items-center justify-between bg-amber-500/10 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+        <div className="px-4 sm:px-6 py-4 border-b border-slate-200/60 flex items-center justify-between bg-amber-500/10 shrink-0 gap-2">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs">
               <QrCode className="w-5 h-5" />
             </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-900 leading-tight">
+            <div className="min-w-0 truncate">
+              <h2 className="text-base font-bold text-slate-900 leading-tight truncate">
                 Library UPI ID &amp; Payment QR
               </h2>
-              <p className="text-xs text-slate-500">
-                Front-Desk Payment Standee &bull; WhatsApp &amp; Invoices
+              <p className="text-[11px] sm:text-xs text-slate-500 truncate">
+                Front-Desk Payment Standee &bull; Auto-syncs across phones
               </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {onOpenHelpFaq && (
+              <button
+                type="button"
+                onClick={() => onOpenHelpFaq('UPI')}
+                className="px-2.5 py-1.5 rounded-xl text-amber-700 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-xs font-bold flex items-center gap-1 transition-colors touch-manipulation"
+                title="Open UPI Help & FAQ"
+              >
+                <HelpCircle className="w-3.5 h-3.5 text-amber-600" />
+                <span className="hidden sm:inline">FAQ</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0 touch-manipulation"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-4 flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto overflow-x-hidden space-y-4 flex-1 min-w-0 max-w-full">
           {/* Active Config Display (View Mode) */}
           {!isEditing && config.isConfigured ? (
             <div className="space-y-4">

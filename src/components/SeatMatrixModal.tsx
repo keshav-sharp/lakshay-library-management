@@ -180,43 +180,43 @@ export const SeatMatrixModal: React.FC<SeatMatrixModalProps> = ({
     >
       {/* Modern Slide-Over Drawer (Right on Desktop, Bottom Sheet on Mobile) */}
       <div
-        className="bg-white w-full sm:max-w-2xl h-[90vh] sm:h-full rounded-t-3xl sm:rounded-t-none sm:rounded-l-3xl shadow-2xl border-t sm:border-t-0 sm:border-l border-slate-200/60 flex flex-col overflow-hidden animate-in slide-in-from-bottom sm:slide-in-from-right duration-200"
+        className="bg-white w-full max-w-full sm:max-w-2xl h-[90vh] sm:h-full rounded-t-3xl sm:rounded-t-none sm:rounded-l-3xl shadow-2xl border-t sm:border-t-0 sm:border-l border-slate-200/60 flex flex-col min-w-0 overflow-hidden animate-in slide-in-from-bottom sm:slide-in-from-right duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200/60 flex items-center justify-between bg-white shrink-0 gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-600 flex items-center justify-center shrink-0">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200/60 flex items-center justify-between bg-white shrink-0 gap-2">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-600 flex items-center justify-center shrink-0">
               <Armchair className="w-5 h-5" />
             </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900 tracking-tight">
+            <div className="min-w-0 truncate">
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight truncate">
                 Minimalist Desk Matrix
               </h3>
-              <p className="text-xs text-slate-500">
-                Hover or tap any compact tile to inspect student shift &amp; quick actions
+              <p className="text-[11px] sm:text-xs text-slate-500 truncate">
+                Tap any desk tile to inspect student shift &amp; actions
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={() => setIsManageMode(!isManageMode)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all touch-manipulation ${
                 isManageMode
                   ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
                   : 'bg-slate-50 text-slate-700 border-slate-200/60 hover:bg-slate-100'
               }`}
             >
               <Settings2 className="w-3.5 h-3.5" />
-              <span>{isManageMode ? 'Done' : 'Customize Desks'}</span>
+              <span>{isManageMode ? 'Done' : 'Customize'}</span>
             </button>
 
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+              className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors touch-manipulation"
             >
               <X className="w-5 h-5" />
             </button>
@@ -224,7 +224,7 @@ export const SeatMatrixModal: React.FC<SeatMatrixModalProps> = ({
         </div>
 
         {/* Unified Metrics & Micro-Indicator Legend Bar */}
-        <div className="px-6 py-3 bg-slate-50/70 border-b border-slate-200/60 flex items-center justify-between flex-wrap gap-3 shrink-0">
+        <div className="px-4 sm:px-6 py-2.5 sm:py-3 bg-slate-50/70 border-b border-slate-200/60 flex items-center justify-between flex-wrap gap-2 shrink-0 min-w-0">
           <div className="flex items-center gap-4 text-xs">
             <span className="inline-flex items-center gap-1.5 text-slate-600 font-medium">
               <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.65)]" />
@@ -458,7 +458,7 @@ export const SeatMatrixModal: React.FC<SeatMatrixModalProps> = ({
         </div>
 
         {/* Minimalist Sections & Compact Seat Grid */}
-        <div className="p-6 overflow-y-auto space-y-5 flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto overflow-x-hidden space-y-4 sm:space-y-5 flex-1 min-w-0 max-w-full">
           {Array.from(sectionsMap.entries()).map(([sectionName, sectionSeats]) => (
             <div
               key={sectionName}

@@ -23,6 +23,7 @@ All tracked issues are also logged and closed in the **[GitHub Issues Tracker](h
 | **[#11](https://github.com/keshav-sharp/lakshay-library-management/issues/11)** | **Cross-Device Sync Key Relay** | Method 1 Master Sync Key failed to pull on the Secondary device when using a raw Google Drive File ID | Google Drive v3 API blocks unauthenticated / cross-account downloads of `drive.file`-scoped files (`403`/`404`) when the Secondary device lacks the Primary owner's OAuth token | Replaced raw Drive File IDs in Method 1 with a dedicated **CORS-Enabled Cloud Sync Key Relay (`LK-XXXXXXXXXXXX`)** + **Self-Contained Offline Sync Package (`LKSYNC1:...`)** | `v2.0.4` |
 | **[#12](https://github.com/keshav-sharp/lakshay-library-management/issues/12)** | **Real-Time Active Auto-Sync & Telemetry** | Secondary devices required manual sync pull, and client sessions & Secondary device errors were not shared across devices in real time | Primary changes only synced when manual push was tapped or daily cron ran, and Secondary device error logs stayed isolated in local storage | Added real-time debounced auto-sync (`triggerLivePrimaryAutoSync`) on Primary data entry, active-state auto-polling on Secondary devices, and cross-device heartbeat sessions & error log relay (`${topic}_presence`, `${topic}_logs`) | `v2.0.5` |
 | **[#13](https://github.com/keshav-sharp/lakshay-library-management/issues/13)** | **Bidirectional Multi-Device Sync** | Real-time auto-sync was unidirectional (Primary -> Secondary), preventing edits made on Secondary or third consecutive devices from syncing back to Primary | Role guard restricted live broadcasting to `PRIMARY` role and polling to `SECONDARY` role, creating asymmetric one-way sync | Expanded live auto-sync (`triggerLiveAutoSync`) and live polling (`checkAndApplyLiveRelaySync`) across all connected devices with self-authored snapshot filtering (`primaryDeviceId !== config.deviceId`) | `v2.0.6` |
+| **[#14](https://github.com/keshav-sharp/lakshay-library-management/issues/14)** | **Mobile Viewport Optimization, Help & FAQ, UPI Sync, Security Policy** | Sidewise scrollbar on mobile viewports, cluttered inline explanatory text, standalone color palette drawer clutter, and missing cross-device sync for library UPI/standee details | Viewport width overflow in headers and modal containers, uncentralized documentation, decoupled UPI config in MasterSyncPayload, and unconfigured GitHub security policy | Enforced strict zero-horizontal-scroll viewport containment (`overflow-x: hidden`), built dedicated `HelpFaqModal`, moved palette to Settings, synchronized `upiConfig` cross-device via `triggerLiveAutoSync`, and established GitHub security policy (`SECURITY.md`) | `v2.0.7` |
 
 ---
 
@@ -176,3 +177,26 @@ All tracked issues are also logged and closed in the **[GitHub Issues Tracker](h
   1. Converted `triggerLivePrimaryAutoSync` to **`triggerLiveAutoSync()`** in `src/services/googleDriveSyncService.ts`. Any device with a shared channel topic (`masterSyncChannelTopic` or `PRIMARY`) now debounces and broadcasts its local data modifications immediately to the shared cloud relay channel.
   2. Upgraded **`checkAndApplyLiveRelaySync()`** to run on all connected devices (Primary, Secondary, and third consecutive devices). Added self-authored snapshot filtering (`newerPayload.primaryDeviceId === config.deviceId`) to prevent devices from processing their own broadcasts, while seamlessly consuming updates from any peer device whenever `newerPayload.syncedAt > config.lastSyncedAtISO`.
   3. Updated `src/App.tsx` active-state polling to listen for peer updates across all devices every 3.5 seconds when visible, providing truly seamless bidirectional vice-versa multi-device sync across unlimited consecutive devices.
+
+---
+
+### Issue #14: Mobile Viewport Optimization, Dedicated Help & FAQ Center, Color Palette Under Settings, Cross-Device UPI Sync & Security Policy (`v2.0.7`)
+- **Symptom**:
+  1. On mobile screens ($375\text{px}$–$430\text{px}$), the application displayed a visible horizontal / side-wise scrollbar (`< [=======] >`), with the top app bar elements and modal dialogs overflowing viewport boundaries.
+  2. Long, multi-sentence technical descriptions scattered throughout modals created severe visual clutter and vertical scroll fatigue.
+  3. The "Color Palette" menu item was positioned redundantly as a top-level drawer item directly beneath "Settings".
+  4. Updating the library's UPI ID, payee name, or reception standee QR code on the Primary Phone did not synchronize to Secondary or peer devices.
+  5. The GitHub repository lacked an official security policy (`SECURITY.md`), prompting GitHub's "Set up a security policy" notification.
+- **Root Cause**:
+  1. Lack of explicit `width: 100%`, `max-width: 100vw`, and `overflow-x: hidden` constraints on the root document and modal card shells allowed fixed or min-width flex containers to exceed the 375px viewport threshold.
+  2. Modal components inlined instructional text directly instead of referencing a centralized, searchable Help & FAQ knowledge base.
+  3. The Navigation Drawer had separated Settings and Theme customization into disconnected entries.
+  4. `MasterSyncPayload` in `googleDriveSyncService.ts` only bundled students, payments, attendance, shifts, and seats, omitting the `upi_payment_config` store.
+  5. Neither root `/SECURITY.md` nor `.github/SECURITY.md` were present in the repository.
+- **Fix Applied**:
+  1. **Strict Viewport Containment**: Added `width: 100%; max-width: 100vw; overflow-x: hidden;` across `html`, `body`, `#root`, `<main>`, animated tab containers, and all modal wrappers (`GoogleDriveSyncModal`, `SeatMatrixModal`, `StudentDetailModal`, `AddStudentModal`, `SettingsModal`, and `UpiPaymentQrModal`). Redesigned Top App Bar to an ergonomic 2-row layout on mobile and 2x2 grid for metrics.
+  2. **Dedicated Help & FAQ Center (`HelpFaqModal.tsx`)**: Created a centralized, categorized, searchable Help & Documentation Center (`SYNC`, `UPI`, `SEATS`, `SHIFTS`, `ATTENDANCE`, `REMINDERS`, `ALL`) with responsive mobile layout and direct security policy references. Replaced multi-paragraph modal text with clean 1-liners and quick `(?) FAQ` links.
+  3. **Drawer Simplification**: Moved "Color Palette" under **Settings & Appearance** (`SettingsModal`) and linked "Help & Documentation (FAQ)" in `NavigationDrawer`.
+  4. **Cross-Device UPI Synchronization**: Added `upiConfig?: StoredUpiConfig` to `MasterSyncPayload`. Hooked `triggerLiveAutoSync(300)` into `UpiPaymentQrModal` save actions, and subscribed secondary devices to live UPI updates via `subscribeToUpiConfig`.
+  5. **GitHub Security Policy**: Authored official, comprehensive GitHub Security Policies in both root `SECURITY.md` and `.github/SECURITY.md` supporting `v2.0.x` with responsible vulnerability reporting timelines and defensive architecture specifications.
+

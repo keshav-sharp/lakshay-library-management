@@ -78,6 +78,7 @@ import {
   ChevronDown,
   ChevronUp,
   Bug,
+  HelpCircle,
 } from 'lucide-react';
 
 interface GoogleDriveSyncModalProps {
@@ -85,6 +86,7 @@ interface GoogleDriveSyncModalProps {
   onClose: () => void;
   students: Student[];
   onTriggerToast: (msg: string) => void;
+  onOpenHelpFaq?: (category?: 'SYNC' | 'UPI' | 'SEATS' | 'SHIFTS' | 'ATTENDANCE' | 'REMINDERS') => void;
 }
 
 type DriveModalSubTab = 'SYNC_ROLE' | 'HEARTBEAT_CLIENTS' | 'CRASH_LOGS';
@@ -94,6 +96,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
   onClose,
   students,
   onTriggerToast,
+  onOpenHelpFaq,
 }) => {
   const { darkModeClass, isDarkMode } = useTheme();
   const [activeSubTab, setActiveSubTab] = useState<DriveModalSubTab>('SYNC_ROLE');
@@ -506,7 +509,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
       onClick={onClose}
     >
       <div
-        className={`w-full sm:max-w-xl h-[92vh] sm:h-full rounded-t-3xl sm:rounded-t-none sm:rounded-l-3xl shadow-2xl border-t sm:border-t-0 sm:border-l overflow-hidden flex flex-col animate-in slide-in-from-bottom sm:slide-in-from-right duration-200 ${
+        className={`w-full max-w-full sm:max-w-xl h-[92vh] sm:h-full rounded-t-3xl sm:rounded-t-none sm:rounded-l-3xl shadow-2xl border-t sm:border-t-0 sm:border-l overflow-hidden flex flex-col min-w-0 animate-in slide-in-from-bottom sm:slide-in-from-right duration-200 ${
           isDarkMode
             ? 'bg-slate-900 border-slate-800/60 text-slate-100'
             : 'bg-white border-slate-200/60 text-slate-900'
@@ -514,40 +517,55 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header with Active Client Count Badge */}
-        <div className="px-6 py-4 border-b border-slate-200/60 flex items-center justify-between bg-amber-500/10 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200/60 flex items-center justify-between bg-amber-500/10 shrink-0 gap-2">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs">
               <Cloud className="w-5 h-5" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 truncate">
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base font-bold text-slate-900 leading-tight">
+                <h2 className="text-sm sm:text-base font-bold text-slate-900 leading-tight truncate">
                   Google Drive Daily Sync &amp; Primary Role
                 </h2>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-700 border border-emerald-500/30">
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-700 border border-emerald-500/30 shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   <span>
                     {activeClientCount} Active {activeClientCount === 1 ? 'Client' : 'Clients'}
                   </span>
                 </span>
               </div>
-              <p className="text-xs text-slate-500 truncate">
+              <p className="text-[11px] sm:text-xs text-slate-500 truncate">
                 Primary/Secondary Sync &bull; Live Heartbeat &bull; Crash &amp; Error Logs
               </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {onOpenHelpFaq && (
+              <button
+                type="button"
+                onClick={() => onOpenHelpFaq('SYNC')}
+                className="px-2.5 py-1.5 rounded-xl text-amber-700 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-xs font-bold flex items-center gap-1 transition-colors touch-manipulation"
+                title="Open Sync Help & FAQ"
+              >
+                <HelpCircle className="w-3.5 h-3.5 text-amber-600" />
+                <span className="hidden sm:inline">FAQ &amp; Guide</span>
+                <span className="sm:hidden">FAQ</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0 touch-manipulation"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Sub-Navigation Tabs inside Google Drive Daily Sync & Primary Role */}
-        <div className="px-6 pt-3 pb-2 border-b border-slate-200/60 flex items-center gap-1.5 bg-slate-50/70 shrink-0 overflow-x-auto no-scrollbar">
+        <div className="px-3.5 sm:px-6 pt-2.5 pb-2 border-b border-slate-200/60 flex items-center gap-1.5 bg-slate-50/70 shrink-0 overflow-x-auto no-scrollbar min-w-0 max-w-full">
           <button
             type="button"
             onClick={() => setActiveSubTab('SYNC_ROLE')}
@@ -589,7 +607,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
         </div>
 
         {/* Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto overflow-x-hidden space-y-4 sm:space-y-5 flex-1 min-w-0 max-w-full">
           {activeSubTab === 'SYNC_ROLE' && (
             <>
               {/* Active Client Count, Heartbeat & Crash Logs Overview Banner */}
@@ -716,13 +734,19 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                   </span>
                 </div>
 
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Designate <strong>one phone as Primary</strong> (manages the master Google Drive
-                  folder) and any other phones or tablets as <strong>Secondary / Peer Devices</strong>.
-                  With <strong>Vice-Versa Real-Time Sync</strong>, any data entered on any active device
-                  (Primary, Secondary, or third consecutive device) syncs across all connected phones
-                  right away!
-                </p>
+                <div className="flex items-center justify-between text-xs text-slate-500 pt-0.5 flex-wrap gap-1">
+                  <span>Seamless real-time synchronization between library devices.</span>
+                  {onOpenHelpFaq && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenHelpFaq('SYNC')}
+                      className="text-[11px] font-semibold text-amber-600 hover:underline inline-flex items-center gap-0.5"
+                    >
+                      <span>Role Guide &amp; FAQ</span>
+                      &rarr;
+                    </button>
+                  )}
+                </div>
 
                 {/* Role Segmented Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -745,8 +769,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                       )}
                     </div>
                     <p className="text-[11px] text-slate-500 leading-snug">
-                      Master Drive host. Pushes to Google Drive &amp; syncs vice-versa in real time with
-                      all secondary &amp; third devices.
+                      Master Drive host &amp; sync key generator.
                     </p>
                   </button>
 
@@ -762,15 +785,14 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                         <CloudDownload className="w-4 h-4 text-amber-600" />
-                        Secondary / Consecutive Phone
+                        Secondary / Peer Phone
                       </span>
                       {syncConfig.deviceRole === 'SECONDARY' && (
                         <CheckCircle2 className="w-4 h-4 text-amber-600" />
                       )}
                     </div>
                     <p className="text-[11px] text-slate-500 leading-snug">
-                      Connected peer. Receives updates from Primary &amp; broadcasts own changes vice-versa
-                      to all connected devices.
+                      Follower device. Pulls via Sync Key.
                     </p>
                   </button>
                 </div>
@@ -844,10 +866,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-600 leading-snug">
-                        Tap <strong>Copy Sync Key</strong> below and paste this{' '}
-                        <code>LK-...</code> key on your Secondary Phone. It syncs all{' '}
-                        <strong>{students.length} students</strong> immediately on{' '}
-                        <strong>any Gmail account</strong>!
+                        Tap <strong>Copy Sync Key</strong> and paste on your secondary device to sync students, seats, shifts &amp; UPI in real time.
                       </p>
                       <div className="flex items-center gap-2">
                         <input
@@ -1319,13 +1338,13 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
           {activeSubTab === 'HEARTBEAT_CLIENTS' && (
             <div className="space-y-4">
               {/* Summary Banner */}
-              <div className="p-4 rounded-2xl border border-emerald-200/70 bg-emerald-50/60 flex items-center justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-3">
+              <div className="p-4 rounded-2xl border border-emerald-200/70 bg-emerald-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-700 flex items-center justify-center shrink-0">
                     <Users className="w-5 h-5" />
                   </div>
-                  <div>
-                    <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-slate-900 flex items-center gap-2 flex-wrap">
                       <span>
                         {activeClientCount} Active {activeClientCount === 1 ? 'Client' : 'Clients'}{' '}
                         Online
@@ -1343,11 +1362,11 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
                   <button
                     type="button"
                     onClick={handleManualHeartbeatPing}
-                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all shrink-0"
+                    className="flex-1 sm:flex-initial px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all shrink-0 touch-manipulation"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>Send Heartbeat Ping</span>
@@ -1357,7 +1376,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                     type="button"
                     onClick={handleSyncHeartbeatAndCrashLogsToDrive}
                     disabled={isSyncingLogsToDrive}
-                    className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all shrink-0 disabled:opacity-50"
+                    className="flex-1 sm:flex-initial px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-95 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all shrink-0 disabled:opacity-50 touch-manipulation"
                   >
                     <Cloud className="w-3.5 h-3.5" />
                     <span>{isSyncingLogsToDrive ? 'Syncing...' : 'Sync to Drive'}</span>
@@ -1466,17 +1485,17 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
               </div>
 
               {/* Google Drive Automated_Logs Path Note */}
-              <div className="p-3.5 rounded-xl bg-slate-100/80 border border-slate-200/60 text-xs text-slate-600 flex items-start gap-2.5">
+              <div className="p-3.5 rounded-xl bg-slate-100/80 border border-slate-200/60 text-xs text-slate-600 flex items-start gap-2.5 min-w-0">
                 <Cloud className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <span className="font-bold text-slate-800">
+                <div className="space-y-1 min-w-0 flex-1">
+                  <span className="font-bold text-slate-800 break-all block">
                     Google Drive Heartbeat Sync ({LOGS_FOLDER_NAME}/{ACTIVE_CLIENTS_FILENAME}):
                   </span>
-                  <p className="leading-relaxed">
+                  <p className="leading-relaxed break-words">
                     Connected devices automatically merge their active client counts and heartbeat
                     timestamps in your Google Drive master folder.
                     {logsFolderMeta?.lastSyncedAtISO && (
-                      <span className="block font-mono text-[11px] text-emerald-700 mt-1">
+                      <span className="block font-mono text-[11px] text-emerald-700 mt-1 break-all">
                         Last Drive Telemetry Sync:{' '}
                         {new Date(logsFolderMeta.lastSyncedAtISO).toLocaleString()}
                       </span>

@@ -77,7 +77,7 @@ export const ExpandableFabMenu: React.FC<ExpandableFabMenuProps> = ({
 
       {isOpen && (
         <div
-          className={`fixed right-4 bottom-24 z-40 w-72 sm:w-80 flex flex-col bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/60 overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-200 ${darkModeClass}`}
+          className={`fixed right-4 bottom-24 z-40 w-72 sm:w-80 max-w-[calc(100vw-2rem)] flex flex-col bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/60 overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-200 ${darkModeClass}`}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-4 py-2.5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800/60 shrink-0">
