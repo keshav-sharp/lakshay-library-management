@@ -603,14 +603,19 @@ export const buildCurrentMasterSyncPayload = (): MasterSyncPayload => {
 
 /**
  * Triggers an immediate debounced auto-sync to Cloud Relay & Google Drive when new data is entered
- * on the Primary device. Runs seamlessly in the background without blocking the UI.
+ * on ANY active device (Primary, Secondary, or third consecutive device).
+ * Runs seamlessly in the background without blocking the UI.
  */
 let autoSyncTimeout: ReturnType<typeof setTimeout> | null = null;
 let isAutoSyncing = false;
 
-export const triggerLivePrimaryAutoSync = (delayMs: number = 800) => {
+export const triggerLiveAutoSync = (delayMs: number = 800) => {
   const config = getGoogleDriveSyncConfig();
-  if (config.deviceRole !== 'PRIMARY') return;
+  const cleanDeviceId = (config.deviceId || 'default').replace(/[^a-zA-Z0-9]/g, '');
+  const topic =
+    config.masterSyncChannelTopic ||
+    (config.deviceRole === 'PRIMARY' ? `lakshay_ch_${cleanDeviceId}` : null);
+  if (!topic) return;
 
   if (autoSyncTimeout) {
     clearTimeout(autoSyncTimeout);
@@ -620,10 +625,10 @@ export const triggerLivePrimaryAutoSync = (delayMs: number = 800) => {
     if (isAutoSyncing) return;
     try {
       isAutoSyncing = true;
-      // 1. Immediately publish to the instant Cloud Relay
+      // 1. Immediately publish to the instant Cloud Relay on the shared channel
       await publishMasterSnapshotToSyncKeyRelay();
 
-      // 2. If Google Drive access token is available in memory, also push snapshot to Google Drive
+      // 2. If Google Drive access token is available in memory on this device, also push snapshot to Google Drive
       const token = getDriveAccessToken();
       if (token && config.autoDailySyncEnabled) {
         await pushPrimarySnapshotToGoogleDrive(token, config.lastDriveFileId).catch(() => {});
@@ -635,6 +640,8 @@ export const triggerLivePrimaryAutoSync = (delayMs: number = 800) => {
     }
   }, delayMs);
 };
+
+export const triggerLivePrimaryAutoSync = triggerLiveAutoSync;
 
 /**
  * Generates a 100% self-contained, offline-capable Sync Code (`LKSYNC1:...`)
@@ -873,9 +880,10 @@ export const applyMasterSyncPayloadLocally = (
 };
 
 /**
- * Checks the live Cloud Relay channel for any newer snapshot published by Primary.
- * If found and newer than last sync, it downloads and applies it locally right away.
- * Returns { synced: true, ... } if new data was applied, or { synced: false } if already up-to-date.
+ * Checks the live Cloud Relay channel for any newer snapshot published by any peer device
+ * (Primary, Secondary, or third consecutive device).
+ * If found and authored by another device with a newer timestamp, it downloads and applies it locally right away.
+ * Returns { synced: true, ... } if new peer data was applied, or { synced: false } if already up-to-date.
  */
 let isCheckingLiveRelay = false;
 export const checkAndApplyLiveRelaySync = async (): Promise<{
@@ -885,7 +893,12 @@ export const checkAndApplyLiveRelaySync = async (): Promise<{
   syncedAt?: string;
 }> => {
   const config = getGoogleDriveSyncConfig();
-  if (config.deviceRole !== 'SECONDARY' || !config.masterSyncChannelTopic) {
+  const cleanDeviceId = (config.deviceId || 'default').replace(/[^a-zA-Z0-9]/g, '');
+  const topic =
+    config.masterSyncChannelTopic ||
+    (config.deviceRole === 'PRIMARY' ? `lakshay_ch_${cleanDeviceId}` : null);
+
+  if (!topic) {
     return { synced: false };
   }
   if (isCheckingLiveRelay) return { synced: false };
@@ -893,7 +906,7 @@ export const checkAndApplyLiveRelaySync = async (): Promise<{
   try {
     isCheckingLiveRelay = true;
     const pollRes = await fetch(
-      `https://ntfy.sh/${config.masterSyncChannelTopic}/json?poll=1&since=1h`
+      `https://ntfy.sh/${topic}/json?poll=1&since=1h`
     );
     if (!pollRes.ok) return { synced: false };
     const text = (await pollRes.text()).trim();
@@ -926,11 +939,16 @@ export const checkAndApplyLiveRelaySync = async (): Promise<{
     const newerPayload = (await newerFileRes.json()) as MasterSyncPayload;
     if (!newerPayload?.data?.students) return { synced: false };
 
-    // If payload has a syncedAt, compare with lastSyncedAtISO
+    // Ignore snapshots authored by this device itself to prevent self-echoes
+    if (newerPayload.primaryDeviceId === config.deviceId) {
+      return { synced: false };
+    }
+
+    // If payload has a syncedAt, compare with local lastSyncedAtISO
     if (config.lastSyncedAtISO && newerPayload.syncedAt) {
       const lastTime = new Date(config.lastSyncedAtISO).getTime();
       const payloadTime = new Date(newerPayload.syncedAt).getTime();
-      if (payloadTime <= lastTime && config.lastDriveFileId === candidateFileId) {
+      if (payloadTime <= lastTime) {
         return { synced: false };
       }
     }

@@ -6,10 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v2.0.6] - 2026-11-10 (Vice-Versa Real-Time Multi-Device Consecutive Sync)
+
+### Direct APK Download
+- 📦 **[Download `LakshayLibrary-v2.0.6.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 🔗 **[View Release Notes on GitHub (`v2.0.6`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v2.0.6)**
+
+### Added & Improved
+- **Bidirectional Vice-Versa Sync (Primary ⇄ Secondary ⇄ Third Device Consecutive)**:
+  - Enabled two-way synchronization: any student registration, payment update, attendance check-in, shift, or seat modification made on **ANY active device** (Primary, Secondary, or third consecutive device) broadcasts immediately to the shared cloud sync channel.
+  - All active devices poll and apply peer snapshots automatically within 3.5 seconds without manual intervention.
+  - Self-authored snapshot filtering (`newerPayload.primaryDeviceId === config.deviceId`) prevents redundant self-echoes while propagating changes consecutively across unlimited peer devices.
+- **Unified Master Cloud Relay Topic**:
+  - Consecutive devices pairing with the Primary device save and share the common channel topic (`masterSyncChannelTopic`), forming a continuous real-time mesh network.
+
+---
+
 ## [v2.0.5] - 2026-11-10 (Real-Time Active-State Auto-Sync & Cross-Device Telemetry / Secondary Device Logs)
 
 ### Direct APK Download
-- 📦 **[Download `LakshayLibrary-v2.0.5.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 📦 **[Download `LakshayLibrary-v2.0.5.apk`](https://github.com/keshav-sharp/lakshay-library-management/releases/download/v2.0.5/LakshayLibrary-v2.0.5.apk)**
 - 🔗 **[View Release Notes on GitHub (`v2.0.5`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v2.0.5)**
 
 ### Added & Improved

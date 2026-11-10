@@ -717,10 +717,11 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                 </div>
 
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  To avoid multi-phone sync conflicts, set <strong>one phone as Primary</strong>{' '}
-                  (uploads the daily snapshot to Google Drive) and any other phone/tablet as{' '}
-                  <strong>Secondary</strong> (pulls the daily snapshot once a day without
-                  overwriting).
+                  Designate <strong>one phone as Primary</strong> (manages the master Google Drive
+                  folder) and any other phones or tablets as <strong>Secondary / Peer Devices</strong>.
+                  With <strong>Vice-Versa Real-Time Sync</strong>, any data entered on any active device
+                  (Primary, Secondary, or third consecutive device) syncs across all connected phones
+                  right away!
                 </p>
 
                 {/* Role Segmented Cards */}
@@ -744,7 +745,8 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                       )}
                     </div>
                     <p className="text-[11px] text-slate-500 leading-snug">
-                      Single source of truth. Pushes daily database snapshot to Google Drive.
+                      Master Drive host. Pushes to Google Drive &amp; syncs vice-versa in real time with
+                      all secondary &amp; third devices.
                     </p>
                   </button>
 
@@ -760,15 +762,15 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                         <CloudDownload className="w-4 h-4 text-amber-600" />
-                        Secondary Phone
+                        Secondary / Consecutive Phone
                       </span>
                       {syncConfig.deviceRole === 'SECONDARY' && (
                         <CheckCircle2 className="w-4 h-4 text-amber-600" />
                       )}
                     </div>
                     <p className="text-[11px] text-slate-500 leading-snug">
-                      Pulls daily updates from Primary via Google Drive. Uploads locked to prevent
-                      conflicts.
+                      Connected peer. Receives updates from Primary &amp; broadcasts own changes vice-versa
+                      to all connected devices.
                     </p>
                   </button>
                 </div>

@@ -380,19 +380,23 @@ export default function App() {
     };
   }, []);
 
-  // Active-State Real-Time Live Sync:
-  // When Secondary device is active in foreground, sync immediately whenever new data is entered on Primary
+  // Active-State Real-Time Live Sync (Vice-Versa & Consecutive across all connected devices):
+  // When ANY device is active in foreground, sync immediately whenever new data is entered on any peer device
   useEffect(() => {
     const runActiveLiveSync = () => {
       const config = getGoogleDriveSyncConfig();
-      if (config.deviceRole !== 'SECONDARY' || !config.masterSyncChannelTopic) return;
+      const cleanDeviceId = (config.deviceId || 'default').replace(/[^a-zA-Z0-9]/g, '');
+      const topic =
+        config.masterSyncChannelTopic ||
+        (config.deviceRole === 'PRIMARY' ? `lakshay_ch_${cleanDeviceId}` : null);
+      if (!topic) return;
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
 
       checkAndApplyLiveRelaySync()
         .then((res) => {
           if (res.synced) {
             setToastMessage(
-              `⚡ Live Synced: Received updated ${res.studentCount} students from ${res.primaryDeviceName || 'Primary Phone'}!`
+              `⚡ Live Synced: Received updated ${res.studentCount} students from ${res.primaryDeviceName || 'Peer Device'}!`
             );
             setTimeout(() => setToastMessage(null), 4500);
           }

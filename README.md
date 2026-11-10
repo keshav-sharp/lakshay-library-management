@@ -29,8 +29,8 @@ A production-grade, offline-first library and study hall management system built
      - `Lakshay_Library_Master/Automated_Logs/` for real-time active client presence (`active_clients_status.json`) and automated crash diagnostics (`crash_and_error_logs.json`).
 6. **App Launch & Gesture-Based Exit Confirmation Animations**:
    - Branded launch splash animation (`AppLaunchSplash`) on startup and an interactive Exit Confirmation dialog (`ExitAppModal`) with a farewell animation triggered when the user performs an Android Back gesture or edge back-swipe on the home screen.
-7. **Native Mobile Ergonomics & Real-Time Sync (`v2.0.5` Production Release)**:
-   - Real-time active-state auto-sync between Primary and Secondary devices, cross-device client session presence & secondary crash logs capture, swipe-to-switch gestures between navigation tabs, custom warm-toned empty state illustrations, zero pre-populated demo records (`0` students on clean install), 1-tap `LK-...` Cloud Relay & `LKSYNC1:...` Offline Master Sync Keys for cross-account sharing, and a left-sliding Navigation Drawer with embedded GitHub version link (`v2.0.5`).
+7. **Native Mobile Ergonomics & Vice-Versa Real-Time Sync (`v2.0.6` Production Release)**:
+   - Real-time active-state bidirectional auto-sync between Primary, Secondary, and third consecutive devices (vice-versa sync), cross-device client session presence & secondary crash logs capture, swipe-to-switch gestures between navigation tabs, custom warm-toned empty state illustrations, zero pre-populated demo records (`0` students on clean install), 1-tap `LK-...` Cloud Relay & `LKSYNC1:...` Offline Master Sync Keys for cross-account sharing, and a left-sliding Navigation Drawer with embedded GitHub version link (`v2.0.6`).
 
 ---
 
@@ -115,9 +115,9 @@ Lakshay Library uses a **Primary (Master Writer)** and **Secondary (Read-Only Fo
 ### Option 1: Direct 1-Click APK Download from GitHub Releases (Recommended)
 Every tagged version of this app includes a pre-compiled `.apk` attached directly to **[GitHub Releases](https://github.com/keshav-sharp/lakshay-library-management/releases)**:
 
-- **Direct Latest APK URL (`v2.0.5`)**:  
+- **Direct Latest APK URL (`v2.0.6`)**:  
   👉 **[`https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk`](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
-- **All Version Releases (`v1.0.0` – `v2.0.5`)**:  
+- **All Version Releases (`v1.0.0` – `v2.0.6`)**:  
   👉 **[`https://github.com/keshav-sharp/lakshay-library-management/releases`](https://github.com/keshav-sharp/lakshay-library-management/releases)**
 
 ### Option 2: Download from GitHub Actions Build Artifacts
@@ -158,7 +158,7 @@ This app is a certified Progressive Web App (PWA):
 Curious about the technical challenges we solved while building this app across Web (PWA) and Android (`.apk`)? We maintain a full post-mortem log and closed issue tracker covering every bug, root cause, and architectural fix:
 
 - 📖 **[Read the Full `ENGINEERING_LOG.md`](ENGINEERING_LOG.md)**
-- 🐛 **[Browse Resolved GitHub Issues (`#1` – `#12`)](https://github.com/keshav-sharp/lakshay-library-management/issues?q=is%3Aissue+is%3Aclosed)**
+- 🐛 **[Browse Resolved GitHub Issues (`#1` – `#13`)](https://github.com/keshav-sharp/lakshay-library-management/issues?q=is%3Aissue+is%3Aclosed)**
 
 | Issue | Category | Summary of Challenge & Fix | Fixed In |
 | :--- | :--- | :--- | :--- |
@@ -174,6 +174,7 @@ Curious about the technical challenges we solved while building this app across 
 | **[#10](https://github.com/keshav-sharp/lakshay-library-management/issues/10)** | OAuth `Error 403` Fix | Resolved `Error 403: access_denied` on secondary Gmail accounts by removing restricted `drive.readonly` scope & adding Identity Sign-In | `v2.0.3` |
 | **[#11](https://github.com/keshav-sharp/lakshay-library-management/issues/11)** | Seamless Sync Key | Fixed Method 1 Sync Key pull failure on Secondary phones by replacing raw Drive File IDs with **`LK-...` Cloud Relay Keys** & **`LKSYNC1:...` Offline Keys** | `v2.0.4` |
 | **[#12](https://github.com/keshav-sharp/lakshay-library-management/issues/12)** | Real-Time Active Sync | Enabled immediate auto-sync on active state, cross-device client sessions capture, and secondary device logs relay | `v2.0.5` |
+| **[#13](https://github.com/keshav-sharp/lakshay-library-management/issues/13)** | Vice-Versa Sync | Enabled bidirectional multi-device consecutive sync: Primary ⇄ Secondary ⇄ Third device real-time updates | `v2.0.6` |
 
 ---
 
@@ -181,9 +182,9 @@ Curious about the technical challenges we solved while building this app across 
 
 | Channel | Direct Link | Description |
 | :--- | :--- | :--- |
-| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v2.0.5)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
-| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v2.0.5`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
-| **Engineering Issues & Fixes Log** | 🛠️ **[View `ENGINEERING_LOG.md`](ENGINEERING_LOG.md)** | Root-cause analysis and fixes for all 12 engineering & security challenges solved during development. |
+| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v2.0.6)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
+| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v2.0.6`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
+| **Engineering Issues & Fixes Log** | 🛠️ **[View `ENGINEERING_LOG.md`](ENGINEERING_LOG.md)** | Root-cause analysis and fixes for all 13 engineering & security challenges solved during development. |
 | **Full Changelog** | 📜 **[View `CHANGELOG.md`](CHANGELOG.md)** | Detailed version-by-version history of features, fixes, and improvements. |
 
 ---
