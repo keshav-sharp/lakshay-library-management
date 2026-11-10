@@ -67,6 +67,8 @@ export interface GoogleDriveSyncConfig {
   masterSyncSubfolderId?: string | null;
   sharedFolderInput?: string | null;
   sharedWithEmails?: string[];
+  masterSyncKey?: string | null;
+  masterSyncChannelTopic?: string | null;
 }
 
 export interface DriveBackupFileMetadata {
@@ -84,6 +86,8 @@ export interface MasterSyncPayload {
   syncDateKey: string;
   primaryDeviceId: string;
   primaryDeviceName: string;
+  syncChannelTopic?: string;
+  masterSyncKey?: string;
   folderPath: string;
   data: {
     students: ReturnType<typeof getStoredStudents>;
@@ -529,26 +533,312 @@ export const ensureMasterSyncFolderHierarchy = async (
 };
 
 /**
- * Extracts a clean Google Drive Folder/File ID from either a full Google Drive URL or a raw ID string.
+ * Reliable cross-platform clipboard copy helper that works inside Android APK WebView
+ * as well as mobile/desktop browsers.
+ */
+export const copyTextToClipboard = async (text: string): Promise<boolean> => {
+  if (!text) return false;
+  let copied = false;
+
+  // 1. Synchronous DOM textarea copy (always permitted inside Android WebView user gesture)
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-9999px';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, text.length);
+    copied = document.execCommand('copy');
+    document.body.removeChild(textarea);
+  } catch {
+    // Fall through to navigator.clipboard
+  }
+
+  // 2. Modern Async Clipboard API
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+    }
+  } catch {
+    // Ignore if synchronous copy already succeeded
+  }
+
+  return copied;
+};
+
+/**
+ * Builds the live MasterSyncPayload from the device's current local storage.
+ */
+export const buildCurrentMasterSyncPayload = (): MasterSyncPayload => {
+  const config = getGoogleDriveSyncConfig();
+  const now = new Date();
+  const dateKey = now.toISOString().split('T')[0];
+  const cleanDeviceId = (config.deviceId || 'default').replace(/[^a-zA-Z0-9]/g, '');
+  const syncChannelTopic = config.masterSyncChannelTopic || `lakshay_ch_${cleanDeviceId}`;
+
+  return {
+    schemaVersion: '2.0',
+    application: 'Lakshay Library',
+    syncedAt: now.toISOString(),
+    syncDateKey: dateKey,
+    primaryDeviceId: config.deviceId,
+    primaryDeviceName: config.deviceName,
+    syncChannelTopic,
+    masterSyncKey: config.masterSyncKey || undefined,
+    folderPath: `${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME}`,
+    data: {
+      students: getStoredStudents(),
+      payments: getStoredPayments(),
+      dailyAttendance: getStoredDailyAttendance(),
+      shifts: getStoredShifts(),
+      seats: getStoredSeats(),
+    },
+  };
+};
+
+/**
+ * Generates a 100% self-contained, offline-capable Sync Code (`LKSYNC1:...`)
+ * that embeds all student, seat, shift, payment, and attendance records directly
+ * inside the string so it can be pasted on a Secondary Phone with zero server dependencies.
+ */
+export const generateOfflineSyncPackageKey = (): string => {
+  const payload = buildCurrentMasterSyncPayload();
+  // Strip bulky base64 camera images only in the compact clipboard string to keep it WhatsApp-friendly
+  const compactPayload: MasterSyncPayload = {
+    ...payload,
+    data: {
+      ...payload.data,
+      students: payload.data.students.map((st) => ({
+        ...st,
+        photoUrl:
+          st.photoUrl && st.photoUrl.startsWith('data:image') && st.photoUrl.length > 2048
+            ? undefined
+            : st.photoUrl,
+      })),
+    },
+  };
+  const jsonStr = JSON.stringify(compactPayload);
+  const utf8Bytes = new TextEncoder().encode(jsonStr);
+  let binary = '';
+  for (let i = 0; i < utf8Bytes.length; i++) {
+    binary += String.fromCharCode(utf8Bytes[i]);
+  }
+  const base64Url = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return `LKSYNC1:${base64Url}`;
+};
+
+/**
+ * Decodes a self-contained `LKSYNC1:...` sync key string back into a MasterSyncPayload.
+ */
+export const decodeOfflineSyncPackageKey = (input?: string | null): MasterSyncPayload | null => {
+  if (!input) return null;
+  const idx = input.indexOf('LKSYNC1:');
+  if (idx === -1) return null;
+  const rawToken = input
+    .slice(idx + 'LKSYNC1:'.length)
+    .trim()
+    .split(/\s+/)[0];
+  if (!rawToken) return null;
+
+  try {
+    let base64 = rawToken.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4 !== 0) {
+      base64 += '=';
+    }
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const jsonStr = new TextDecoder().decode(bytes);
+    const parsed = JSON.parse(jsonStr) as MasterSyncPayload;
+    if (parsed && parsed.data && Array.isArray(parsed.data.students)) {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Extracts a 12-character Cloud Relay File ID from a `LK-XXXXXXXXXXXX` Sync Key
+ * (or `https://ntfy.sh/file/XXXXXXXXXXXX.json` URL or bare 12-char relay ID).
+ */
+export const extractRelayFileIdFromSyncKey = (input?: string | null): string | null => {
+  if (!input) return null;
+  const trimmed = input.trim();
+  if (!trimmed || trimmed.includes('LKSYNC1:')) return null;
+
+  // Match explicit `LK-<id>` anywhere in the pasted text (e.g. if copied with surrounding WhatsApp text)
+  const lkMatch = trimmed.match(/LK-([a-zA-Z0-9]{10,16})/);
+  if (lkMatch?.[1]) {
+    return lkMatch[1];
+  }
+
+  // Match full relay URL `https://ntfy.sh/file/<id>.json`
+  const urlMatch = trimmed.match(/ntfy\.sh\/file\/([a-zA-Z0-9]{10,16})(?:\.json)?/);
+  if (urlMatch?.[1]) {
+    return urlMatch[1];
+  }
+
+  // Match bare 12-char alphanumeric relay ID (note: Google Drive IDs are 28-44 chars)
+  if (/^[a-zA-Z0-9]{11,14}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  return null;
+};
+
+/**
+ * Extracts a clean Google Drive Folder/File ID from either a full Google Drive URL or a 20+ char Drive ID string.
  */
 export const extractDriveIdFromInput = (input?: string | null): string | null => {
   if (!input) return null;
   const trimmed = input.trim();
   if (!trimmed) return null;
+  if (trimmed.includes('LKSYNC1:') || extractRelayFileIdFromSyncKey(trimmed)) {
+    return null;
+  }
   const folderMatch = trimmed.match(/\/folders\/([a-zA-Z0-9_-]+)/);
   if (folderMatch?.[1]) return folderMatch[1];
   const fileMatch = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
   if (fileMatch?.[1]) return fileMatch[1];
   const idParamMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if (idParamMatch?.[1]) return idParamMatch[1];
-  if (/^[a-zA-Z0-9_-]{15,}$/.test(trimmed)) return trimmed;
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(trimmed)) return trimmed;
   return null;
 };
 
 /**
- * Enables link-based read permission (`type: 'anyone', role: 'reader'`) on a Drive file or folder
- * created by the Primary Phone so a Secondary Phone can pull it using just the Sync Key (`fileId`)
- * without hitting Google's Error 403 verification block on secondary Gmail accounts.
+ * Publishes the Primary Phone's current database snapshot to the CORS-enabled Cloud Sync Relay
+ * (`ntfy.sh`) and returns a short 15-character Master Sync Key (`LK-XXXXXXXXXXXX`).
+ * Works WITH or WITHOUT Google Drive Sign-In and completely bypasses Google OAuth Error 403!
+ */
+export const publishMasterSnapshotToSyncKeyRelay = async (): Promise<{
+  syncKey: string;
+  fileId: string;
+  syncedAt: string;
+  studentCount: number;
+}> => {
+  const config = getGoogleDriveSyncConfig();
+  const payload = buildCurrentMasterSyncPayload();
+  const topic =
+    payload.syncChannelTopic ||
+    `lakshay_ch_${(config.deviceId || 'primary').replace(/[^a-zA-Z0-9]/g, '')}`;
+
+  const putRes = await fetch(`https://ntfy.sh/${topic}`, {
+    method: 'PUT',
+    headers: {
+      Filename: MASTER_DRIVE_BACKUP_FILENAME,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!putRes.ok) {
+    throw new Error(`Cloud Sync Key relay returned HTTP ${putRes.status}`);
+  }
+
+  const putMeta = (await putRes.json()) as { id?: string; attachment?: { url?: string } };
+  const relayFileId = putMeta.id;
+  if (!relayFileId) {
+    throw new Error('Failed to generate Sync Key ID from Cloud Relay.');
+  }
+
+  const syncKey = `LK-${relayFileId}`;
+  const nowISO = payload.syncedAt;
+  const dateKey = payload.syncDateKey;
+
+  // If this Primary phone previously had a Google Drive File ID, also publish a bridge pointer
+  // so any Secondary phone that pasted the older Drive File ID automatically resolves the new Sync Key!
+  if (config.lastDriveFileId && /^[a-zA-Z0-9_-]{20,}$/.test(config.lastDriveFileId)) {
+    const bridgeTopic = `lakshay_gdrive_${config.lastDriveFileId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 40)}`;
+    fetch(`https://ntfy.sh/${bridgeTopic}`, {
+      method: 'PUT',
+      headers: { Filename: MASTER_DRIVE_BACKUP_FILENAME },
+      body: JSON.stringify({ ...payload, masterSyncKey: syncKey }),
+    }).catch(() => {
+      // Non-fatal background bridge
+    });
+  }
+
+  const latestConfig = getGoogleDriveSyncConfig();
+  saveGoogleDriveSyncConfig({
+    ...latestConfig,
+    masterSyncKey: syncKey,
+    masterSyncChannelTopic: topic,
+    lastSyncedDateKey: latestConfig.lastSyncedDateKey || dateKey,
+    lastSyncedAtISO: latestConfig.lastSyncedAtISO || nowISO,
+    lastPrimaryWriterName: latestConfig.deviceName,
+    lastSyncedStudentCount: payload.data.students.length,
+  });
+
+  return {
+    syncKey,
+    fileId: relayFileId,
+    syncedAt: nowISO,
+    studentCount: payload.data.students.length,
+  };
+};
+
+/**
+ * Applies a downloaded or decoded MasterSyncPayload to local storage and updates sync config.
+ */
+const applyMasterSyncPayloadLocally = (
+  payload: MasterSyncPayload,
+  sourceFileOrKeyId: string
+): {
+  fileId: string;
+  primaryDeviceName: string;
+  syncedAt: string;
+  studentCount: number;
+} => {
+  if (!payload?.data?.students || !Array.isArray(payload.data.students)) {
+    throw new Error('Invalid master sync snapshot format.');
+  }
+
+  importSyncedFirestoreSnapshot(
+    payload.data.students,
+    payload.data.payments || {},
+    payload.data.dailyAttendance || []
+  );
+
+  if (Array.isArray(payload.data.shifts) && payload.data.shifts.length > 0) {
+    saveStoredShifts(payload.data.shifts);
+  }
+  if (Array.isArray(payload.data.seats) && payload.data.seats.length > 0) {
+    saveStoredSeats(payload.data.seats);
+  }
+
+  const now = new Date();
+  const dateKey = now.toISOString().split('T')[0];
+  const config = getGoogleDriveSyncConfig();
+
+  saveGoogleDriveSyncConfig({
+    ...config,
+    lastSyncedDateKey: dateKey,
+    lastSyncedAtISO: now.toISOString(),
+    lastDriveFileId: sourceFileOrKeyId,
+    lastPrimaryWriterName: payload.primaryDeviceName || 'Primary Phone',
+    lastSyncedStudentCount: payload.data.students.length,
+    masterSyncChannelTopic: payload.syncChannelTopic || config.masterSyncChannelTopic || null,
+  });
+
+  return {
+    fileId: sourceFileOrKeyId,
+    primaryDeviceName: payload.primaryDeviceName || 'Primary Phone',
+    syncedAt: payload.syncedAt || now.toISOString(),
+    studentCount: payload.data.students.length,
+  };
+};
+
+/**
+ * Enables link-based read permission (`type: 'anyone', role: 'reader'`) on a Drive file or folder.
  */
 export const enableAnyoneReaderPermission = async (
   accessToken: string,
@@ -637,25 +927,86 @@ export const shareMasterFolderWithEmail = async (
 };
 
 /**
- * Searches Google Drive for `Lakshay_Library_Master_Sync.json`.
- * Supports both authenticated Drive API lookup AND direct Sync Key / Shared Link lookup
- * (using `?key=${firebaseConfig.apiKey}`) so Secondary phones on any Gmail account can pull!
+ * Searches for `Lakshay_Library_Master_Sync.json` via:
+ * 1. Pasted Offline Sync Code (`LKSYNC1:...`)
+ * 2. Pasted Master Sync Key (`LK-XXXXXXXXXXXX` via Cloud Relay)
+ * 3. Google Drive API v3 (for Same-Gmail or Shared Folder Link with Drive OAuth)
  */
 export const findMasterSyncFileOnDrive = async (
-  accessToken?: string | null
+  accessToken?: string | null,
+  overrideSyncKeyInput?: string | null
 ): Promise<DriveBackupFileMetadata | null> => {
   const config = getGoogleDriveSyncConfig();
-  const customSharedId = extractDriveIdFromInput(config.sharedFolderInput);
+  const rawInput =
+    overrideSyncKeyInput !== undefined ? overrideSyncKeyInput : config.sharedFolderInput;
+
+  // 1a. Check if the user pasted a self-contained Offline Sync Code (`LKSYNC1:...`)
+  const decodedOffline = decodeOfflineSyncPackageKey(rawInput);
+  if (decodedOffline) {
+    return {
+      id: 'LKSYNC1-OFFLINE',
+      name: MASTER_DRIVE_BACKUP_FILENAME,
+      modifiedTime: decodedOffline.syncedAt || new Date().toISOString(),
+      folderPath: `Offline Sync Key from ${decodedOffline.primaryDeviceName || 'Primary Phone'} (${decodedOffline.data.students.length} students)`,
+    };
+  }
+
+  // 1b. Check if the user pasted a `LK-XXXXXXXXXXXX` Cloud Relay Sync Key
+  const relayFileId = extractRelayFileIdFromSyncKey(rawInput);
+  if (relayFileId) {
+    try {
+      const relayRes = await fetch(`https://ntfy.sh/file/${relayFileId}.json`);
+      if (relayRes.ok) {
+        const relayPayload = (await relayRes.json()) as MasterSyncPayload;
+        if (relayPayload?.data?.students) {
+          return {
+            id: `LK-${relayFileId}`,
+            name: MASTER_DRIVE_BACKUP_FILENAME,
+            modifiedTime: relayPayload.syncedAt || new Date().toISOString(),
+            folderPath: `Master Sync Key LK-${relayFileId} (${relayPayload.data.students.length} students from ${relayPayload.primaryDeviceName || 'Primary Phone'})`,
+          };
+        }
+      }
+    } catch {
+      // Fall through
+    }
+  }
+
+  const customSharedId = extractDriveIdFromInput(rawInput);
   const hasRealOAuthToken = Boolean(accessToken && accessToken !== 'IDENTITY_SESSION_ACTIVE');
   const apiKeyParam = firebaseConfig.apiKey ? `&key=${encodeURIComponent(firebaseConfig.apiKey)}` : '';
 
-  // 1. If the Secondary user pasted a Sync Key (File ID / Folder ID) or Google Drive Share Link:
+  // 2. If the Secondary user pasted a Google Drive File ID or Share Link:
   if (customSharedId) {
+    // 2a. Check if Primary Phone bridged this Google Drive File ID to the Cloud Sync Relay
+    try {
+      const bridgeTopic = `lakshay_gdrive_${customSharedId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 40)}`;
+      const bridgePoll = await fetch(`https://ntfy.sh/${bridgeTopic}/json?poll=1&since=all`);
+      if (bridgePoll.ok) {
+        const lines = (await bridgePoll.text())
+          .trim()
+          .split('\n')
+          .filter(Boolean)
+          .map((l) => JSON.parse(l) as { id?: string; attachment?: { url?: string } });
+        const latestBridge = [...lines].reverse().find((m) => m.attachment?.url || m.id);
+        if (latestBridge?.id) {
+          return {
+            id: `LK-${latestBridge.id}`,
+            name: MASTER_DRIVE_BACKUP_FILENAME,
+            modifiedTime: new Date().toISOString(),
+            folderPath: `Bridged Sync Key (${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME})`,
+          };
+        }
+      }
+    } catch {
+      // Fall through to Google Drive lookup
+    }
+
     const authHeaders: Record<string, string> = hasRealOAuthToken
       ? { Authorization: `Bearer ${accessToken}` }
       : {};
 
-    // 1a. Check if customSharedId is directly the `Lakshay_Library_Master_Sync.json` file ID
+    // 2b. Check if customSharedId is directly accessible via Google Drive API
     try {
       const directFileUrl = `https://www.googleapis.com/drive/v3/files/${customSharedId}?supportsAllDrives=true&fields=id,name,mimeType,modifiedTime,size,trashed${
         hasRealOAuthToken ? '' : apiKeyParam
@@ -680,7 +1031,7 @@ export const findMasterSyncFileOnDrive = async (
       // Fall through to folder search
     }
 
-    // 1b. Otherwise treat customSharedId as a Shared Folder ID and look for `Lakshay_Library_Master_Sync.json` inside it
+    // 2c. Otherwise treat customSharedId as a Shared Folder ID and look for `Lakshay_Library_Master_Sync.json` inside it
     try {
       const insideSharedFolderQuery = encodeURIComponent(
         `name = '${MASTER_DRIVE_BACKUP_FILENAME}' and '${customSharedId}' in parents and trashed = false`
@@ -707,7 +1058,7 @@ export const findMasterSyncFileOnDrive = async (
     return null;
   }
 
-  // 2. Search across all accessible Drive files with OAuth token
+  // 3. Search across all accessible Drive files with OAuth token
   const globalFileQuery = encodeURIComponent(
     `name = '${MASTER_DRIVE_BACKUP_FILENAME}' and trashed = false`
   );
@@ -743,7 +1094,7 @@ export const findMasterSyncFileOnDrive = async (
     };
   }
 
-  // 3. If this device is PRIMARY, ensure the Master folder hierarchy exists in its own Drive
+  // 4. If this device is PRIMARY, ensure the Master folder hierarchy exists in its own Drive
   if (config.deviceRole === 'PRIMARY' && accessToken) {
     await ensureMasterSyncFolderHierarchy(accessToken);
   }
@@ -753,13 +1104,15 @@ export const findMasterSyncFileOnDrive = async (
 
 /**
  * PRIMARY DEVICE ONLY: Uploads or updates `Lakshay_Library_Master_Sync.json` inside
- * `Lakshay_Library_Master/Master_Sync_Backups/` on Google Drive.
+ * `Lakshay_Library_Master/Master_Sync_Backups/` on Google Drive AND publishes a fresh
+ * `LK-XXXXXXXXXXXX` Master Sync Key to the Cloud Relay for Secondary Phones.
  */
 export const pushPrimarySnapshotToGoogleDrive = async (
   accessToken: string,
   existingFileId?: string | null
 ): Promise<{
   fileId: string;
+  syncKey?: string;
   syncedAt: string;
   studentCount: number;
   folderPath: string;
@@ -773,37 +1126,16 @@ export const pushPrimarySnapshotToGoogleDrive = async (
 
   const { syncSubfolderId } = await ensureMasterSyncFolderHierarchy(accessToken);
 
-  const now = new Date();
-  const dateKey = now.toISOString().split('T')[0];
-  const students = getStoredStudents();
-  const payments = getStoredPayments();
-  const dailyAttendance = getStoredDailyAttendance();
-  const shifts = getStoredShifts();
-  const seats = getStoredSeats();
-
-  const folderPath = `${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME}`;
-
-  const payload: MasterSyncPayload = {
-    schemaVersion: '2.0',
-    application: 'Lakshay Library',
-    syncedAt: now.toISOString(),
-    syncDateKey: dateKey,
-    primaryDeviceId: config.deviceId,
-    primaryDeviceName: config.deviceName,
-    folderPath,
-    data: {
-      students,
-      payments,
-      dailyAttendance,
-      shifts,
-      seats,
-    },
-  };
+  const payload = buildCurrentMasterSyncPayload();
+  const nowISO = payload.syncedAt;
+  const dateKey = payload.syncDateKey;
+  const students = payload.data.students;
+  const folderPath = payload.folderPath;
 
   let targetFileId = existingFileId;
   if (!targetFileId) {
-    const found = await findMasterSyncFileOnDrive(accessToken);
-    if (found) {
+    const found = await findMasterSyncFileOnDrive(accessToken, null);
+    if (found && !found.id.startsWith('LK-') && found.id !== 'LKSYNC1-OFFLINE') {
       targetFileId = found.id;
     }
   }
@@ -860,49 +1192,165 @@ export const pushPrimarySnapshotToGoogleDrive = async (
   const resultData = await res.json();
   const savedFileId = resultData.id || targetFileId || '';
 
-  // Automatically enable reader permission on the uploaded file & subfolder so Secondary phones
-  // can pull using the Sync Key (`savedFileId`) even from another Gmail account without OAuth 403 blocks.
   if (savedFileId) {
     await enableAnyoneReaderPermission(accessToken, savedFileId);
   }
   await enableAnyoneReaderPermission(accessToken, syncSubfolderId);
 
+  // Also publish to the Cloud Sync Key Relay (`LK-XXXXXXXXXXXX`) so Secondary phones on any Gmail can pull!
+  let generatedSyncKey: string | undefined;
+  try {
+    const relayRes = await publishMasterSnapshotToSyncKeyRelay();
+    generatedSyncKey = relayRes.syncKey;
+  } catch {
+    // Non-fatal if relay is temporarily unreachable
+  }
+
   const latestConfig = getGoogleDriveSyncConfig();
   saveGoogleDriveSyncConfig({
     ...latestConfig,
     lastSyncedDateKey: dateKey,
-    lastSyncedAtISO: now.toISOString(),
+    lastSyncedAtISO: nowISO,
     lastDriveFileId: savedFileId,
+    masterSyncKey: generatedSyncKey || latestConfig.masterSyncKey || null,
     lastPrimaryWriterName: latestConfig.deviceName,
     lastSyncedStudentCount: students.length,
   });
 
   return {
     fileId: savedFileId,
-    syncedAt: now.toISOString(),
+    syncKey: generatedSyncKey,
+    syncedAt: nowISO,
     studentCount: students.length,
     folderPath,
   };
 };
 
 /**
- * SECONDARY (OR RESTORE) MODE: Downloads `Lakshay_Library_Master_Sync.json` from
- * `Lakshay_Library_Master/Master_Sync_Backups/` on Google Drive and applies the snapshot locally.
- * Works both with a full Google Drive OAuth token OR using a pasted Primary Sync Key / Share Link!
+ * SECONDARY (OR RESTORE) MODE: Downloads `Lakshay_Library_Master_Sync.json` and applies the snapshot locally.
+ * Seamlessly supports:
+ * 1. Method 1 Master Sync Key (`LK-XXXXXXXXXXXX` via CORS-enabled Cloud Relay — works on ANY Gmail or without sign-in!)
+ * 2. Method 1 Offline Sync Package (`LKSYNC1:...` — 100% offline instant decode!)
+ * 3. Google Drive API v3 (when signed into the same Gmail account or authorized Shared Folder)
  */
 export const pullMasterSnapshotFromGoogleDrive = async (
-  accessToken?: string | null
+  accessToken?: string | null,
+  overrideSyncKeyInput?: string | null
 ): Promise<{
   fileId: string;
   primaryDeviceName: string;
   syncedAt: string;
   studentCount: number;
 }> => {
-  const fileMeta = await findMasterSyncFileOnDrive(accessToken);
+  const config = getGoogleDriveSyncConfig();
+  const rawInput = (
+    overrideSyncKeyInput !== undefined ? overrideSyncKeyInput : config.sharedFolderInput
+  )?.trim();
+
+  // 1. Check if the user pasted an Offline Sync Code (`LKSYNC1:...`)
+  if (rawInput && rawInput.includes('LKSYNC1:')) {
+    const decoded = decodeOfflineSyncPackageKey(rawInput);
+    if (!decoded) {
+      throw new Error(
+        'The pasted Offline Sync Key (LKSYNC1:...) appears incomplete. Please tap "Copy Offline Key" on the Primary Phone and paste again.'
+      );
+    }
+    return applyMasterSyncPayloadLocally(decoded, 'LKSYNC1-OFFLINE');
+  }
+
+  // 2. Check if the user pasted a `LK-XXXXXXXXXXXX` Master Sync Key (or 12-char Relay ID)
+  const relayFileId = extractRelayFileIdFromSyncKey(rawInput);
+  if (relayFileId) {
+    let targetRelayId = relayFileId;
+    const directRes = await fetch(`https://ntfy.sh/file/${targetRelayId}.json`);
+    if (!directRes.ok) {
+      throw new Error(
+        `Sync Key LK-${targetRelayId} has expired or was not found (${directRes.status}). On your Primary Phone, open Google Drive Sync, tap "Refresh & Copy Sync Key", and paste the new LK-... key here.`
+      );
+    }
+
+    let payload = (await directRes.json()) as MasterSyncPayload;
+
+    // Check if the Primary Phone has published an even newer snapshot on its channel since this key was copied!
+    const channelTopic = payload?.syncChannelTopic || config.masterSyncChannelTopic;
+    if (channelTopic) {
+      try {
+        const pollRes = await fetch(`https://ntfy.sh/${channelTopic}/json?poll=1&since=all`);
+        if (pollRes.ok) {
+          const lines = (await pollRes.text())
+            .trim()
+            .split('\n')
+            .filter(Boolean)
+            .map((l) => JSON.parse(l) as { id?: string; time?: number; attachment?: { url?: string } });
+          const newestMsg = [...lines].reverse().find((m) => m.id && m.attachment?.url);
+          if (newestMsg?.id && newestMsg.id !== targetRelayId) {
+            const newerFileRes = await fetch(`https://ntfy.sh/file/${newestMsg.id}.json`);
+            if (newerFileRes.ok) {
+              const newerPayload = (await newerFileRes.json()) as MasterSyncPayload;
+              if (newerPayload?.data?.students) {
+                payload = newerPayload;
+                targetRelayId = newestMsg.id;
+              }
+            }
+          }
+        }
+      } catch {
+        // Use the already downloaded payload
+      }
+    }
+
+    return applyMasterSyncPayloadLocally(payload, `LK-${targetRelayId}`);
+  }
+
+  // 3. Check if the Secondary Phone has a saved `masterSyncChannelTopic` from a previous Sync Key pull
+  if (!rawInput && config.masterSyncChannelTopic) {
+    try {
+      const pollRes = await fetch(
+        `https://ntfy.sh/${config.masterSyncChannelTopic}/json?poll=1&since=all`
+      );
+      if (pollRes.ok) {
+        const lines = (await pollRes.text())
+          .trim()
+          .split('\n')
+          .filter(Boolean)
+          .map((l) => JSON.parse(l) as { id?: string; attachment?: { url?: string } });
+        const newestMsg = [...lines].reverse().find((m) => m.id && m.attachment?.url);
+        if (newestMsg?.id) {
+          const newerFileRes = await fetch(`https://ntfy.sh/file/${newestMsg.id}.json`);
+          if (newerFileRes.ok) {
+            const newerPayload = (await newerFileRes.json()) as MasterSyncPayload;
+            if (newerPayload?.data?.students) {
+              return applyMasterSyncPayloadLocally(newerPayload, `LK-${newestMsg.id}`);
+            }
+          }
+        }
+      }
+    } catch {
+      // Fall through to Google Drive lookup
+    }
+  }
+
+  // 4. Otherwise resolve via `findMasterSyncFileOnDrive` (includes bridged Drive IDs & authenticated Drive search)
+  const fileMeta = await findMasterSyncFileOnDrive(accessToken, rawInput);
   if (!fileMeta) {
+    if (rawInput && /^[a-zA-Z0-9_-]{20,}$/.test(rawInput)) {
+      throw new Error(
+        'That looks like a raw Google Drive File ID, which Google blocks across different Gmail accounts. On your Primary Phone, open Google Drive Sync → Method 1, tap "Copy Sync Key" (starts with LK-...), and paste that LK-... key here!'
+      );
+    }
     throw new Error(
-      `No '${MASTER_DRIVE_BACKUP_FILENAME}' found. If using a different Gmail on this Secondary phone, paste the Primary Phone's Sync Key (or Shared Link) in Section 1 first.`
+      `No '${MASTER_DRIVE_BACKUP_FILENAME}' found. On your Primary Phone, open Google Drive Sync → Method 1, tap "Copy Sync Key" (starts with LK-...), and paste it here on the Secondary Phone.`
     );
+  }
+
+  // If `findMasterSyncFileOnDrive` resolved a bridged `LK-...` key:
+  if (fileMeta.id.startsWith('LK-')) {
+    const bridgedRelayId = fileMeta.id.replace(/^LK-/, '');
+    const bridgedRes = await fetch(`https://ntfy.sh/file/${bridgedRelayId}.json`);
+    if (bridgedRes.ok) {
+      const bridgedPayload = (await bridgedRes.json()) as MasterSyncPayload;
+      return applyMasterSyncPayloadLocally(bridgedPayload, fileMeta.id);
+    }
   }
 
   const hasRealOAuthToken = Boolean(accessToken && accessToken !== 'IDENTITY_SESSION_ACTIVE');
@@ -921,7 +1369,6 @@ export const pullMasterSnapshotFromGoogleDrive = async (
     }
   );
 
-  // Fallback to API key download if Bearer token belongs to a different account without Drive scope
   if (!res.ok && hasRealOAuthToken && apiKeyParam) {
     res = await fetch(
       `https://www.googleapis.com/drive/v3/files/${fileMeta.id}?alt=media&supportsAllDrives=true${apiKeyParam}`
@@ -929,49 +1376,12 @@ export const pullMasterSnapshotFromGoogleDrive = async (
   }
 
   if (!res.ok) {
-    if (res.status === 401 || res.status === 403) {
-      throw new Error(
-        'Google Drive denied download (403). On the Primary Phone, tap "Push Primary Snapshot to Drive" once so the Sync Key is active, then try again.'
-      );
-    }
-    throw new Error(`Failed to download snapshot from Google Drive (${res.status})`);
+    throw new Error(
+      'Google Drive blocked cross-account download. Please copy the "LK-..." Master Sync Key from Method 1 on your Primary Phone and paste it in Section 1 on this Secondary Phone.'
+    );
   }
 
   const payload = (await res.json()) as MasterSyncPayload;
-  if (!payload?.data?.students || !Array.isArray(payload.data.students)) {
-    throw new Error('Invalid master sync file format in Google Drive.');
-  }
-
-  importSyncedFirestoreSnapshot(
-    payload.data.students,
-    payload.data.payments || {},
-    payload.data.dailyAttendance || []
-  );
-
-  if (Array.isArray(payload.data.shifts) && payload.data.shifts.length > 0) {
-    saveStoredShifts(payload.data.shifts);
-  }
-  if (Array.isArray(payload.data.seats) && payload.data.seats.length > 0) {
-    saveStoredSeats(payload.data.seats);
-  }
-
-  const now = new Date();
-  const dateKey = now.toISOString().split('T')[0];
-  const config = getGoogleDriveSyncConfig();
-
-  saveGoogleDriveSyncConfig({
-    ...config,
-    lastSyncedDateKey: dateKey,
-    lastSyncedAtISO: now.toISOString(),
-    lastDriveFileId: fileMeta.id,
-    lastPrimaryWriterName: payload.primaryDeviceName || 'Primary Phone',
-    lastSyncedStudentCount: payload.data.students.length,
-  });
-
-  return {
-    fileId: fileMeta.id,
-    primaryDeviceName: payload.primaryDeviceName || 'Primary Phone',
-    syncedAt: payload.syncedAt || fileMeta.modifiedTime,
-    studentCount: payload.data.students.length,
-  };
+  return applyMasterSyncPayloadLocally(payload, fileMeta.id);
 };
+

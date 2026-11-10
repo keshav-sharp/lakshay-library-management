@@ -12,7 +12,9 @@ import {
   MASTER_SYNC_SUBFOLDER_NAME,
   MASTER_DRIVE_SYNC_PATH,
   MASTER_DRIVE_LOGS_PATH,
+  copyTextToClipboard,
   findMasterSyncFileOnDrive,
+  generateOfflineSyncPackageKey,
   getCurrentDriveUser,
   getDriveAccessToken,
   getGoogleDriveSyncConfig,
@@ -20,6 +22,7 @@ import {
   googleDriveLogout,
   googleDriveSignIn,
   initDriveAuth,
+  publishMasterSnapshotToSyncKeyRelay,
   pullMasterSnapshotFromGoogleDrive,
   pushPrimarySnapshotToGoogleDrive,
   saveGoogleDriveSyncConfig,
@@ -104,6 +107,8 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
   const [driveFileMeta, setDriveFileMeta] = useState<DriveBackupFileMetadata | null>(null);
   const [isCheckingDrive, setIsCheckingDrive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isGeneratingSyncKey, setIsGeneratingSyncKey] = useState(false);
+  const [syncSuccessMessage, setSyncSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [shareEmailInput, setShareEmailInput] = useState('');
   const [isSharingEmail, setIsSharingEmail] = useState(false);
@@ -158,12 +163,30 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setSyncConfig(getGoogleDriveSyncConfig());
+      const latestCfg = getGoogleDriveSyncConfig();
+      setSyncConfig(latestCfg);
       setStoredAuthSession(getStoredGoogleAuthSession());
+      setSyncSuccessMessage(null);
+      setErrorMessage(null);
       const updatedClients = sendPresenceHeartbeat();
       setClients(updatedClients);
       setCrashLogs(getCrashLogs());
       setLogsFolderMeta(getStoredDriveLogsFolderMeta());
+
+      // Automatically publish/refresh the Primary Phone's live `LK-...` Sync Key when opening the modal
+      if (latestCfg.deviceRole === 'PRIMARY') {
+        setIsGeneratingSyncKey(true);
+        publishMasterSnapshotToSyncKeyRelay()
+          .then(() => {
+            setSyncConfig(getGoogleDriveSyncConfig());
+          })
+          .catch(() => {
+            // Non-fatal if offline; Offline Sync Code (`LKSYNC1:...`) remains available
+          })
+          .finally(() => {
+            setIsGeneratingSyncKey(false);
+          });
+      }
 
       const currentToken = getDriveAccessToken();
       if (currentToken) {
@@ -172,6 +195,9 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
         refreshDriveFileMetadata(currentToken);
       } else {
         setNeedsAuth(true);
+        if (latestCfg.deviceRole === 'SECONDARY' && latestCfg.sharedFolderInput?.trim()) {
+          refreshDriveFileMetadata(null);
+        }
       }
     }
 
@@ -294,6 +320,46 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
     }
   };
 
+  const handleRefreshAndCopyMasterSyncKey = async () => {
+    setErrorMessage(null);
+    setSyncSuccessMessage(null);
+
+    // If we already have a generated `LK-...` key, copy it immediately inside the user click gesture
+    if (syncConfig.masterSyncKey) {
+      await copyTextToClipboard(syncConfig.masterSyncKey);
+    }
+
+    setIsGeneratingSyncKey(true);
+    try {
+      const res = await publishMasterSnapshotToSyncKeyRelay();
+      const updatedCfg = getGoogleDriveSyncConfig();
+      setSyncConfig(updatedCfg);
+      await copyTextToClipboard(res.syncKey);
+      const msg = `Copied Master Sync Key (${res.syncKey}) with ${res.studentCount} students! Paste it on your Secondary Phone.`;
+      setSyncSuccessMessage(msg);
+      onTriggerToast(msg);
+    } catch {
+      // Fallback: if Cloud Relay is unreachable, copy the 100% self-contained Offline Sync Code
+      const offlineKey = generateOfflineSyncPackageKey();
+      await copyTextToClipboard(offlineKey);
+      const msg =
+        'Copied Self-Contained Offline Sync Key (LKSYNC1:...)! Paste it on your Secondary Phone to sync offline.';
+      setSyncSuccessMessage(msg);
+      onTriggerToast(msg);
+    } finally {
+      setIsGeneratingSyncKey(false);
+    }
+  };
+
+  const handleCopyOfflineSyncPackage = async () => {
+    setErrorMessage(null);
+    const offlineKey = generateOfflineSyncPackageKey();
+    await copyTextToClipboard(offlineKey);
+    const msg = `Copied Offline Sync Package (${students.length} students)! Paste in the Sync Key box on your Secondary Phone.`;
+    setSyncSuccessMessage(msg);
+    onTriggerToast(msg);
+  };
+
   const handleConfirmedPrimaryPush = async () => {
     setShowConfirmPushDialog(false);
     if (!accessToken) {
@@ -303,13 +369,16 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
 
     setIsSyncing(true);
     setErrorMessage(null);
+    setSyncSuccessMessage(null);
     try {
       const res = await pushPrimarySnapshotToGoogleDrive(accessToken, driveFileMeta?.id);
       setSyncConfig(getGoogleDriveSyncConfig());
       await refreshDriveFileMetadata(accessToken);
-      onTriggerToast(
-        `Primary Snapshot synced to Google Drive (${res.studentCount} students in ${MASTER_DRIVE_BACKUP_FILENAME})!`
-      );
+      const msg = `Primary Snapshot synced (${res.studentCount} students)${
+        res.syncKey ? ` • Sync Key: ${res.syncKey}` : ''
+      }!`;
+      setSyncSuccessMessage(msg);
+      onTriggerToast(msg);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to push snapshot to Google Drive.';
       if (msg === 'AUTH_REQUIRED') {
@@ -323,27 +392,33 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
     }
   };
 
-  const handleSecondaryPullFromDrive = async () => {
-    const hasSyncKey = Boolean(syncConfig.sharedFolderInput?.trim());
+  const handleSecondaryPullFromDrive = async (customKeyOverride?: string) => {
+    const keyToUse =
+      customKeyOverride !== undefined
+        ? customKeyOverride.trim()
+        : (syncConfig.sharedFolderInput || '').trim();
+    const hasSyncKey = Boolean(keyToUse || syncConfig.masterSyncChannelTopic);
     if (!accessToken && !hasSyncKey) {
       setNeedsAuth(true);
-      onTriggerToast(
-        'Please either paste the Primary Phone Sync Key in Section 1 or sign in with Google.'
-      );
+      const msg =
+        'Please paste the Primary Phone Master Sync Key (starts with LK-...) in Section 1 first.';
+      setErrorMessage(msg);
+      onTriggerToast(msg);
       return;
     }
 
     setIsSyncing(true);
     setErrorMessage(null);
+    setSyncSuccessMessage(null);
     try {
-      const res = await pullMasterSnapshotFromGoogleDrive(accessToken);
+      const res = await pullMasterSnapshotFromGoogleDrive(accessToken, keyToUse);
       setSyncConfig(getGoogleDriveSyncConfig());
       await refreshDriveFileMetadata(accessToken);
-      onTriggerToast(
-        `Synced ${res.studentCount} students from Google Drive (written by ${res.primaryDeviceName})!`
-      );
+      const successMsg = `✓ Successfully synced ${res.studentCount} students from ${res.primaryDeviceName}!`;
+      setSyncSuccessMessage(successMsg);
+      onTriggerToast(successMsg);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to pull snapshot from Google Drive.';
+      const msg = err instanceof Error ? err.message : 'Failed to pull snapshot.';
       if (msg === 'AUTH_REQUIRED') {
         setNeedsAuth(true);
         setAccessToken(null);
@@ -740,43 +815,65 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                   <div className="p-3 rounded-xl bg-white border border-slate-200/70 space-y-2.5">
                     <div className="text-[11px] font-bold text-slate-800 flex items-center justify-between">
                       <span>🔑 Share with Secondary Phone (Any Gmail Account)</span>
-                      <span className="text-[10px] font-mono text-amber-700">Cross-Account Sync</span>
+                      <span className="text-[10px] font-mono text-emerald-700 font-bold">
+                        {syncConfig.masterSyncKey
+                          ? `Ready (${students.length} Students)`
+                          : 'Generating Key...'}
+                      </span>
                     </div>
 
                     {/* 1-Tap Copy Master Sync Key */}
-                    <div className="p-2.5 rounded-xl bg-amber-50/80 border border-amber-200/80 space-y-1.5">
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-amber-900">
-                        Method 1 (Recommended — Bypasses Error 403): Copy Master Sync Key
+                    <div className="p-2.5 rounded-xl bg-amber-50/80 border border-amber-200/80 space-y-2">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-amber-900 flex items-center justify-between">
+                        <span>Method 1 (Recommended — Bypasses Error 403): Master Sync Key</span>
+                        <span className="font-mono text-[10px] text-amber-800">
+                          No Google Sign-In Needed
+                        </span>
                       </div>
                       <p className="text-[11px] text-slate-600 leading-snug">
-                        After pushing your snapshot, copy this <strong>Master Sync Key</strong> and
-                        paste it on the Secondary Phone. It pulls your data immediately on{' '}
-                        <strong>any Gmail account</strong> without needing Google OAuth verification!
+                        Tap <strong>Copy Sync Key</strong> below and paste this{' '}
+                        <code>LK-...</code> key on your Secondary Phone. It syncs all{' '}
+                        <strong>{students.length} students</strong> immediately on{' '}
+                        <strong>any Gmail account</strong>!
                       </p>
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
                           readOnly
                           value={
-                            driveFileMeta?.id ||
-                            syncConfig.lastDriveFileId ||
-                            'Push Primary Snapshot once to generate Sync Key'
+                            syncConfig.masterSyncKey ||
+                            (isGeneratingSyncKey
+                              ? 'Generating LK-... Sync Key...'
+                              : 'Tap "Copy Sync Key" to generate LK-... key')
                           }
-                          className="flex-1 px-2.5 py-1.5 rounded-lg border border-amber-300/80 bg-white text-[11px] font-mono text-slate-800"
+                          className="flex-1 px-2.5 py-1.5 rounded-lg border border-amber-300/80 bg-white text-xs font-mono font-bold text-slate-900"
                         />
                         <button
                           type="button"
-                          disabled={!(driveFileMeta?.id || syncConfig.lastDriveFileId)}
-                          onClick={() => {
-                            const keyToCopy = driveFileMeta?.id || syncConfig.lastDriveFileId || '';
-                            if (keyToCopy && navigator.clipboard) {
-                              navigator.clipboard.writeText(keyToCopy);
-                              onTriggerToast('Master Sync Key copied! Send it to your Secondary Phone.');
-                            }
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold shrink-0"
+                          disabled={isGeneratingSyncKey}
+                          onClick={handleRefreshAndCopyMasterSyncKey}
+                          className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold shrink-0 flex items-center gap-1.5"
                         >
-                          Copy Sync Key
+                          {isGeneratingSyncKey ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              <span>Updating...</span>
+                            </>
+                          ) : (
+                            <span>Copy Sync Key</span>
+                          )}
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 pt-0.5 flex-wrap">
+                        <span className="text-[10px] text-slate-500">
+                          Need 100% offline WhatsApp transfer?
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleCopyOfflineSyncPackage}
+                          className="text-[10px] font-bold text-amber-800 hover:text-amber-700 underline"
+                        >
+                          Copy Offline Sync Package (LKSYNC1:...)
                         </button>
                       </div>
                     </div>
@@ -809,36 +906,86 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                         </div>
                       )}
                     </div>
+
+                    {syncSuccessMessage && (
+                      <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>{syncSuccessMessage}</span>
+                      </div>
+                    )}
+                    {errorMessage && (
+                      <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span>{errorMessage}</span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="p-3 rounded-xl bg-white border border-slate-200/70 space-y-2.5">
                     <div className="text-[11px] font-bold text-slate-800 flex items-center justify-between">
                       <span>🔑 Pull from Primary Phone (Works with Any Gmail!)</span>
-                      <span className="text-[10px] font-mono text-emerald-700">No Error 403 Block</span>
+                      <span className="text-[10px] font-mono text-emerald-700 font-bold">
+                        No Error 403 Block
+                      </span>
                     </div>
                     <p className="text-[11px] text-slate-500 leading-snug">
-                      Paste the <strong>Master Sync Key</strong> (or Google Drive Share Link) from your
-                      Primary Phone below and tap <strong>Pull Daily Snapshot Now</strong> — works
-                      instantly even if this phone uses a different Gmail account!
+                      Paste the <strong>Master Sync Key</strong> (starts with <code>LK-...</code> or{' '}
+                      <code>LKSYNC1:...</code>) from your Primary Phone below and tap{' '}
+                      <strong>Pull via Sync Key</strong> — works instantly without needing Google
+                      Drive OAuth!
                     </p>
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                      <input
-                        type="text"
-                        value={syncConfig.sharedFolderInput || ''}
-                        onChange={(e) => handleSharedFolderInputChange(e.target.value)}
-                        placeholder="Paste Primary Phone Master Sync Key or Shared Drive Link"
-                        className="flex-1 px-3 py-2 rounded-xl border border-slate-200/80 bg-slate-50 text-xs text-slate-900 font-mono focus:outline-hidden focus:ring-2 focus:ring-amber-500/40"
-                      />
+                      <div className="relative flex-1 flex items-center">
+                        <input
+                          type="text"
+                          value={syncConfig.sharedFolderInput || ''}
+                          onChange={(e) => handleSharedFolderInputChange(e.target.value)}
+                          placeholder="Paste LK-... Sync Key or LKSYNC1:... Offline Key"
+                          className="w-full px-3 py-2 pr-8 rounded-xl border border-slate-200/80 bg-slate-50 text-xs text-slate-900 font-mono focus:outline-hidden focus:ring-2 focus:ring-amber-500/40"
+                        />
+                        {syncConfig.sharedFolderInput && (
+                          <button
+                            type="button"
+                            onClick={() => handleSharedFolderInputChange('')}
+                            className="absolute right-2 text-slate-400 hover:text-slate-600 p-1"
+                            title="Clear Sync Key"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                       <button
                         type="button"
-                        onClick={handleSecondaryPullFromDrive}
+                        onClick={() => handleSecondaryPullFromDrive()}
                         disabled={isSyncing || !syncConfig.sharedFolderInput?.trim()}
                         className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold shrink-0 flex items-center justify-center gap-1.5 transition-all"
                       >
-                        <CloudDownload className="w-3.5 h-3.5" />
-                        <span>{isSyncing ? 'Pulling...' : 'Pull via Sync Key'}</span>
+                        {isSyncing ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Pulling...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CloudDownload className="w-3.5 h-3.5" />
+                            <span>Pull via Sync Key</span>
+                          </>
+                        )}
                       </button>
                     </div>
+
+                    {syncSuccessMessage && (
+                      <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>{syncSuccessMessage}</span>
+                      </div>
+                    )}
+                    {errorMessage && (
+                      <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span>{errorMessage}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1121,7 +1268,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
 
                       <button
                         type="button"
-                        onClick={handleSecondaryPullFromDrive}
+                        onClick={() => handleSecondaryPullFromDrive()}
                         disabled={isSyncing}
                         className={`w-full px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 ${
                           syncConfig.deviceRole === 'SECONDARY'

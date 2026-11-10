@@ -6,10 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v2.0.4] - 2026-11-10 (Seamless `LK-...` Cloud Relay Sync Key & Offline `LKSYNC1:...` Package)
+
+### Direct APK Download
+- 📦 **[Download `LakshayLibrary-v2.0.4.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 🔗 **[View Release Notes on GitHub (`v2.0.4`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v2.0.4)**
+
+### Fixed & Improved
+- **Resolved Method 1 Sync Key Pull Failure on Secondary Devices**:
+  - Previously, Method 1 copied the raw Google Drive File ID (`lastDriveFileId`), which Google Drive v3 API rejected with `403`/`404` when pulled from a Secondary Phone without the Primary account's OAuth token.
+  - Built a dedicated **CORS-Enabled Cloud Sync Key Relay (`publishMasterSnapshotToSyncKeyRelay`)** that automatically generates a 15-character **`LK-XXXXXXXXXXXX`** Sync Key whenever the Primary Phone opens the Sync modal, taps **Copy Sync Key**, or pushes to Google Drive.
+  - Added a **100% Offline Sync Package (`LKSYNC1:...`)** option (`generateOfflineSyncPackageKey` / `decodeOfflineSyncPackageKey`) that embeds the entire student, seat, shift, payment, and attendance snapshot directly inside the copied text so Secondary Phones can sync even without internet relay access.
+  - Added a cross-platform Android WebView clipboard helper (`copyTextToClipboard`) using synchronous DOM selection + `navigator.clipboard` fallback.
+
+---
+
 ## [v2.0.3] - 2026-11-10 (Fix `Error 403: access_denied` for Secondary Gmail Accounts & Master Sync Key)
 
 ### Direct APK Download
-- 📦 **[Download `LakshayLibrary-v2.0.3.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 📦 **[Download `LakshayLibrary-v2.0.3.apk`](https://github.com/keshav-sharp/lakshay-library-management/releases/download/v2.0.3/LakshayLibrary-v2.0.3.apk)**
 - 🔗 **[View Release Notes on GitHub (`v2.0.3`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v2.0.3)**
 
 ### Fixed & Added
