@@ -66,6 +66,7 @@ import {
   CheckSquare,
   MessageSquare,
   ArrowUpDown,
+  ArrowUpRight,
   Menu,
   X,
   Clock
@@ -652,6 +653,17 @@ export default function App() {
     };
   }, [students]);
 
+  const projectedNext30Days = useMemo(() => {
+    let sum = 0;
+    students.forEach((s) => {
+      const diff = getDaysDifference(s.nextFeeDueDate);
+      if (diff <= 30) {
+        sum += s.monthlyFee;
+      }
+    });
+    return sum;
+  }, [students]);
+
   // Bottom Navigation tabs configuration (Including requested ANALYTICS tab!)
   const navTabs = [
     {
@@ -1009,6 +1021,33 @@ export default function App() {
           />
         ) : (
           <>
+            {/* Homepage Analytics Overview Card */}
+            {activeTab === 'ALL' && (
+              <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent rounded-2xl p-3.5 sm:p-4 border border-amber-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <BarChart3 className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 tracking-tight">
+                      Financial & Collection Analytics Overview
+                    </h3>
+                    <p className="text-[11px] text-slate-600 truncate mt-0.5">
+                      Projected 30-day collection: <span className="font-bold text-amber-800 font-mono">₹{projectedNext30Days.toLocaleString('en-IN')}</span> &bull; Monthly Run-Rate: <span className="font-bold text-slate-800 font-mono">₹{counts.totalMonthlyRevenue.toLocaleString('en-IN')}</span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleTabSwitch('ANALYTICS')}
+                  className="px-3.5 py-1.5 rounded-full bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shrink-0 shadow-2xs transition-all flex items-center gap-1.5 touch-manipulation"
+                >
+                  <span>View Full Analytics</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* Compact Segmented Shift Filter Pills */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
               <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 shrink-0 flex items-center gap-1 mr-1">

@@ -103,16 +103,6 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
       },
     },
     {
-      id: 'help_faq',
-      label: 'Help & Documentation (FAQ)',
-      subtitle: 'Clear guides for sync, UPI, seating & fees',
-      icon: HelpCircle,
-      onClick: () => {
-        handleCloseDrawer();
-        if (onOpenHelpFaq) onOpenHelpFaq();
-      },
-    },
-    {
       id: 'scan_qr',
       label: 'Scan / QR Check-in',
       subtitle: 'Front-desk digital attendance scanner',
@@ -172,6 +162,16 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
       onClick: () => {
         handleCloseDrawer();
         if (onOpenGoogleDriveSync) onOpenGoogleDriveSync();
+      },
+    },
+    {
+      id: 'help_faq',
+      label: 'Help & Documentation (FAQ)',
+      subtitle: 'Clear guides for sync, UPI, seating & fees',
+      icon: HelpCircle,
+      onClick: () => {
+        handleCloseDrawer();
+        if (onOpenHelpFaq) onOpenHelpFaq();
       },
     },
     {
