@@ -1,0 +1,22 @@
+{
+  "name": "Lakshay Library Management (LibTrack)",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:20-bookworm",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "dsznajder.es7-react-js-snippets",
+        "bradlc.vscode-tailwindcss"
+      ]
+    }
+  },
+  "postCreateCommand": "npm install",
+  "portsAttributes": {
+    "3000": {
+      "label": "LibTrack Web Dev Server",
+      "onAutoForward": "notify"
+    }
+  },
+  "forwardPorts": [3000]
+}
