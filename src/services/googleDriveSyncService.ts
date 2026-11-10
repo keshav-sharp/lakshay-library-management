@@ -22,7 +22,10 @@ import {
 import { getStoredShifts, saveStoredShifts } from './shiftService';
 import { getStoredSeats, saveStoredSeats } from './seatService';
 
-export const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
+export const SCOPES = [
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/drive.readonly',
+];
 
 // Hierarchical Master Folder & Subfolder Architecture on Google Drive
 export const MASTER_DRIVE_ROOT_FOLDER_NAME = 'Lakshay_Library_Master';
@@ -63,6 +66,8 @@ export interface GoogleDriveSyncConfig {
   lastSyncedStudentCount: number | null;
   masterRootFolderId?: string | null;
   masterSyncSubfolderId?: string | null;
+  sharedFolderInput?: string | null;
+  sharedWithEmails?: string[];
 }
 
 export interface DriveBackupFileMetadata {
@@ -513,38 +518,148 @@ export const ensureMasterSyncFolderHierarchy = async (
 };
 
 /**
- * Searches Google Drive inside `Lakshay_Library_Master/Master_Sync_Backups/` for `Lakshay_Library_Master_Sync.json`.
+ * Extracts a clean Google Drive Folder/File ID from either a full Google Drive URL or a raw ID string.
+ */
+export const extractDriveIdFromInput = (input?: string | null): string | null => {
+  if (!input) return null;
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  const folderMatch = trimmed.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+  if (folderMatch?.[1]) return folderMatch[1];
+  const fileMatch = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (fileMatch?.[1]) return fileMatch[1];
+  const idParamMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (idParamMatch?.[1]) return idParamMatch[1];
+  if (/^[a-zA-Z0-9_-]{15,}$/.test(trimmed)) return trimmed;
+  return null;
+};
+
+/**
+ * PRIMARY DEVICE HELPER: Grants read-only (or writer) permission on the `Lakshay_Library_Master`
+ * root folder and `Master_Sync_Backups` subfolder to another Google account email so a Secondary
+ * device signed in with a different Gmail address can pull the master snapshot.
+ */
+export const shareMasterFolderWithEmail = async (
+  accessToken: string,
+  targetEmail: string
+): Promise<{ rootFolderId: string; syncSubfolderId: string; sharedEmail: string }> => {
+  const cleanEmail = targetEmail.trim().toLowerCase();
+  if (!cleanEmail || !cleanEmail.includes('@')) {
+    throw new Error('Please enter a valid Google email address (e.g. colleague@gmail.com).');
+  }
+
+  const { rootFolderId, syncSubfolderId } = await ensureMasterSyncFolderHierarchy(accessToken);
+
+  for (const folderId of [rootFolderId, syncSubfolderId]) {
+    const permRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${folderId}/permissions?sendNotificationEmail=false&supportsAllDrives=true`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          role: 'reader',
+          type: 'user',
+          emailAddress: cleanEmail,
+        }),
+      }
+    );
+
+    if (!permRes.ok) {
+      if (permRes.status === 401 || permRes.status === 403) {
+        clearStoredGoogleAuthSession();
+        throw new Error('AUTH_REQUIRED');
+      }
+      const errText = await permRes.text().catch(() => '');
+      throw new Error(
+        `Failed to share folder with ${cleanEmail} (${permRes.status}). ${errText.slice(0, 120)}`
+      );
+    }
+  }
+
+  const config = getGoogleDriveSyncConfig();
+  const existingEmails = config.sharedWithEmails || [];
+  if (!existingEmails.includes(cleanEmail)) {
+    saveGoogleDriveSyncConfig({
+      ...config,
+      sharedWithEmails: [...existingEmails, cleanEmail],
+    });
+  }
+
+  return { rootFolderId, syncSubfolderId, sharedEmail: cleanEmail };
+};
+
+/**
+ * Searches Google Drive (including "Shared with me" folders when a Secondary phone signs in
+ * with a different Gmail account) for `Lakshay_Library_Master_Sync.json`.
  */
 export const findMasterSyncFileOnDrive = async (
   accessToken: string
 ): Promise<DriveBackupFileMetadata | null> => {
-  const { syncSubfolderId } = await ensureMasterSyncFolderHierarchy(accessToken);
+  const config = getGoogleDriveSyncConfig();
+  const customSharedId = extractDriveIdFromInput(config.sharedFolderInput);
 
-  const subfolderQuery = encodeURIComponent(
-    `name = '${MASTER_DRIVE_BACKUP_FILENAME}' and '${syncSubfolderId}' in parents and trashed = false`
+  // 1. If the Secondary user pasted a specific Shared Folder / File ID or Link, check it first
+  if (customSharedId) {
+    const insideSharedFolderQuery = encodeURIComponent(
+      `name = '${MASTER_DRIVE_BACKUP_FILENAME}' and '${customSharedId}' in parents and trashed = false`
+    );
+    const sharedFolderUrl = `https://www.googleapis.com/drive/v3/files?q=${insideSharedFolderQuery}&spaces=drive&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc&pageSize=1`;
+    const sharedRes = await fetch(sharedFolderUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (sharedRes.ok) {
+      const sharedData = await sharedRes.json();
+      if (sharedData.files && sharedData.files.length > 0) {
+        return {
+          ...(sharedData.files[0] as DriveBackupFileMetadata),
+          folderPath: `Shared Folder (${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME})`,
+        };
+      }
+    }
+  }
+
+  // 2. Search across all accessible Drive files (including "Shared with me" from Primary's Gmail)
+  const globalFileQuery = encodeURIComponent(
+    `name = '${MASTER_DRIVE_BACKUP_FILENAME}' and trashed = false`
   );
-  const subfolderUrl = `https://www.googleapis.com/drive/v3/files?q=${subfolderQuery}&spaces=drive&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc&pageSize=1`;
+  const globalSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${globalFileQuery}&spaces=drive&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name,modifiedTime,size,owners)&orderBy=modifiedTime desc&pageSize=5`;
 
-  const response = await fetch(subfolderUrl, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+  const globalResponse = await fetch(globalSearchUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
 
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
+  if (!globalResponse.ok) {
+    if (globalResponse.status === 401 || globalResponse.status === 403) {
       clearStoredGoogleAuthSession();
       throw new Error('AUTH_REQUIRED');
     }
-    throw new Error(`Google Drive search failed (${response.status})`);
+    throw new Error(`Google Drive search failed (${globalResponse.status})`);
   }
 
-  const data = await response.json();
-  if (data.files && data.files.length > 0) {
-    return {
-      ...(data.files[0] as DriveBackupFileMetadata),
-      folderPath: `${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME}`,
+  const globalData = await globalResponse.json();
+  if (globalData.files && globalData.files.length > 0) {
+    const latestFile = globalData.files[0] as DriveBackupFileMetadata & {
+      owners?: Array<{ emailAddress?: string; me?: boolean }>;
     };
+    const ownerEmail = latestFile.owners?.[0]?.emailAddress;
+    const isSharedFromOtherAccount = latestFile.owners?.[0] && !latestFile.owners[0].me;
+    return {
+      id: latestFile.id,
+      name: latestFile.name,
+      modifiedTime: latestFile.modifiedTime,
+      size: latestFile.size,
+      folderPath: isSharedFromOtherAccount
+        ? `Shared by ${ownerEmail || 'Primary Account'} (${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME})`
+        : `${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME}`,
+    };
+  }
+
+  // 3. If this device is PRIMARY, ensure the Master folder hierarchy exists in its own Drive
+  if (config.deviceRole === 'PRIMARY') {
+    await ensureMasterSyncFolderHierarchy(accessToken);
   }
 
   return null;

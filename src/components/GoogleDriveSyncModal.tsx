@@ -23,6 +23,7 @@ import {
   pullMasterSnapshotFromGoogleDrive,
   pushPrimarySnapshotToGoogleDrive,
   saveGoogleDriveSyncConfig,
+  shareMasterFolderWithEmail,
 } from '../services/googleDriveSyncService';
 import {
   getStoredActiveClients,
@@ -104,6 +105,8 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
   const [isCheckingDrive, setIsCheckingDrive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [shareEmailInput, setShareEmailInput] = useState('');
+  const [isSharingEmail, setIsSharingEmail] = useState(false);
 
   // Active Clients, Heartbeat & Crash Logs state
   const [clients, setClients] = useState<ActiveClientRecord[]>(() => getStoredActiveClients());
@@ -256,6 +259,39 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
     };
     setSyncConfig(updated);
     saveGoogleDriveSyncConfig(updated);
+  };
+
+  const handleSharedFolderInputChange = (val: string) => {
+    const updated: GoogleDriveSyncConfig = {
+      ...syncConfig,
+      sharedFolderInput: val,
+    };
+    setSyncConfig(updated);
+    saveGoogleDriveSyncConfig(updated);
+  };
+
+  const handleShareFolderWithSecondaryEmail = async () => {
+    if (!accessToken) {
+      setNeedsAuth(true);
+      onTriggerToast('Please sign in with Google on this Primary phone first.');
+      return;
+    }
+    if (!shareEmailInput.trim()) return;
+    setIsSharingEmail(true);
+    setErrorMessage(null);
+    try {
+      const res = await shareMasterFolderWithEmail(accessToken, shareEmailInput);
+      setSyncConfig(getGoogleDriveSyncConfig());
+      setShareEmailInput('');
+      onTriggerToast(
+        `Shared Lakshay_Library_Master folder with ${res.sharedEmail}! They can now sign in with their Gmail on the Secondary phone and pull.`
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to share folder.';
+      setErrorMessage(msg);
+    } finally {
+      setIsSharingEmail(false);
+    }
   };
 
   const handleConfirmedPrimaryPush = async () => {
@@ -694,6 +730,64 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                     </button>
                   </div>
                 </div>
+
+                {/* Cross-Account Gmail Sync Helper (Different Gmail on Secondary Device) */}
+                {syncConfig.deviceRole === 'PRIMARY' ? (
+                  <div className="p-3 rounded-xl bg-white border border-slate-200/70 space-y-2">
+                    <div className="text-[11px] font-bold text-slate-800 flex items-center justify-between">
+                      <span>Using a Different Gmail on Secondary Phone?</span>
+                      <span className="text-[10px] font-mono text-amber-700">Cross-Account Share</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-snug">
+                      Enter the Secondary phone&apos;s Gmail address below (or share{' '}
+                      <code>{MASTER_DRIVE_ROOT_FOLDER_NAME}</code> directly in the Google Drive app) so
+                      their account has permission to read your master sync file.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="email"
+                        value={shareEmailInput}
+                        onChange={(e) => setShareEmailInput(e.target.value)}
+                        placeholder="secondary-user@gmail.com"
+                        className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200/80 bg-slate-50 text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleShareFolderWithSecondaryEmail}
+                        disabled={isSharingEmail || !shareEmailInput.trim()}
+                        className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold shrink-0 transition-all"
+                      >
+                        {isSharingEmail ? 'Sharing...' : 'Grant Access'}
+                      </button>
+                    </div>
+                    {syncConfig.sharedWithEmails && syncConfig.sharedWithEmails.length > 0 && (
+                      <div className="text-[10px] text-emerald-700 font-mono">
+                        Shared with: {syncConfig.sharedWithEmails.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-white border border-slate-200/70 space-y-2">
+                    <div className="text-[11px] font-bold text-slate-800 flex items-center justify-between">
+                      <span>Signed in with a Different Gmail than Primary?</span>
+                      <span className="text-[10px] font-mono text-sky-700">Auto &quot;Shared with me&quot;</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-snug">
+                      Once the Primary phone shares <code>{MASTER_DRIVE_ROOT_FOLDER_NAME}</code> with your
+                      Gmail address, this Secondary phone automatically finds{' '}
+                      <code>{MASTER_DRIVE_BACKUP_FILENAME}</code> in your Google Drive&apos;s{' '}
+                      <strong>&quot;Shared with me&quot;</strong>. Optionally, you can also paste the
+                      shared folder link or ID below:
+                    </p>
+                    <input
+                      type="text"
+                      value={syncConfig.sharedFolderInput || ''}
+                      onChange={(e) => handleSharedFolderInputChange(e.target.value)}
+                      placeholder="Optional: Paste shared Google Drive folder link or ID"
+                      className="w-full px-3 py-1.5 rounded-xl border border-slate-200/80 bg-slate-50 text-xs text-slate-900 font-mono focus:outline-hidden focus:ring-2 focus:ring-amber-500/40"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* 2. Google Account Connection & Sign-In Data Storage */}
@@ -859,7 +953,8 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                       <div className="text-[11px] font-mono text-slate-500">
                         Folder:{' '}
                         <strong className="text-slate-700">
-                          {MASTER_DRIVE_ROOT_FOLDER_NAME} / {MASTER_SYNC_SUBFOLDER_NAME}
+                          {driveFileMeta?.folderPath ||
+                            `${MASTER_DRIVE_ROOT_FOLDER_NAME} / ${MASTER_SYNC_SUBFOLDER_NAME}`}
                         </strong>
                       </div>
                       {driveFileMeta ? (
