@@ -125,13 +125,33 @@ This app is a certified Progressive Web App (PWA):
 
 ---
 
+## 🛠️ Engineering Challenges & Fixes Log
+
+Curious about the technical challenges we solved while building this app across Web (PWA) and Android (`.apk`)? We maintain a full post-mortem log and closed issue tracker covering every bug, root cause, and architectural fix:
+
+- 📖 **[Read the Full `ENGINEERING_LOG.md`](ENGINEERING_LOG.md)**
+- 🐛 **[Browse Resolved GitHub Issues (`#1` – `#8`)](https://github.com/keshav-sharp/lakshay-library-management/issues?q=is%3Aissue+is%3Aclosed)**
+
+| Issue | Category | Summary of Challenge & Fix | Fixed In |
+| :--- | :--- | :--- | :--- |
+| **[#1](https://github.com/keshav-sharp/lakshay-library-management/issues/1)** | Cloud Sync | Prevented multi-phone Google Drive overwrite conflicts via **Primary (Master Writer)** vs. **Secondary (Follower)** device roles | `v1.2.0` |
+| **[#2](https://github.com/keshav-sharp/lakshay-library-management/issues/2)** | Drive Architecture | Organized cloud files into `Lakshay_Library_Master/Master_Sync_Backups/` & `Automated_Logs/` with live Heartbeat & Crash Logs | `v1.3.0` |
+| **[#3](https://github.com/keshav-sharp/lakshay-library-management/issues/3)** | Android Build | Fixed custom launcher icon (`app-icon.png`) in Android File Manager & Home Screen via `capacitor:sync:after` hooks | `v1.3.3` |
+| **[#4](https://github.com/keshav-sharp/lakshay-library-management/issues/4)** | Android OAuth | Resolved `403: disallowed_useragent` in Android WebView by stripping `; wv` and setting a standard Chrome Mobile User-Agent | `v1.3.2` |
+| **[#5](https://github.com/keshav-sharp/lakshay-library-management/issues/5)** | Play Store Release | Reset default student database to `0` records (`com.lakshaylibrary.app`), added launch splash animation, and removed dev toolbars | `v2.0.0` |
+| **[#6](https://github.com/keshav-sharp/lakshay-library-management/issues/6)** | OAuth Redirects | Fixed `400 Malformed Request` during Google Sign-In on Android APK via `allowNavigation: ["*"]` and WebView third-party cookie support | `v2.0.1` |
+| **[#7](https://github.com/keshav-sharp/lakshay-library-management/issues/7)** | Native Gestures | Replaced menu-based exit button with native Android `OnBackPressedDispatcher` gesture interception & exit confirmation animation | `v2.0.1` |
+| **[#8](https://github.com/keshav-sharp/lakshay-library-management/issues/8)** | Security (CodeQL) | Resolved CodeQL High-severity alert (`CWE-312`) by keeping OAuth access tokens strictly in memory instead of `localStorage` | `v2.0.1` |
+
+---
+
 ## 📲 Quick Download: Android `.APK` & Version History
 
 | Channel | Direct Link | Description |
 | :--- | :--- | :--- |
-| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v2.0.0)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
-| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v2.0.0`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
-| **GitHub Actions Build Artifacts** | ⚙️ **[Automated CI APK Builds](https://github.com/keshav-sharp/lakshay-library-management/actions/workflows/build-apk.yml)** | Every commit to `main` automatically compiles and releases a fresh `LakshayLibrary.apk`. |
+| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v2.0.1)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
+| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v2.0.1`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
+| **Engineering Issues & Fixes Log** | 🛠️ **[View `ENGINEERING_LOG.md`](ENGINEERING_LOG.md)** | Root-cause analysis and fixes for all 8 engineering & security challenges solved during development. |
 | **Full Changelog** | 📜 **[View `CHANGELOG.md`](CHANGELOG.md)** | Detailed version-by-version history of features, fixes, and improvements. |
 
 ---
