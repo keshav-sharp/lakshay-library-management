@@ -42,7 +42,6 @@ targetPngs.forEach((file) => {
 });
 
 // 2. Remove adaptive-icon XML overrides (mipmap-anydpi-v26 & vector drawables)
-// so Android uses the full custom PNG icon directly in File Manager and Home Screen
 const pathsToRemove = [
   path.join(resDir, 'mipmap-anydpi-v26/ic_launcher.xml'),
   path.join(resDir, 'mipmap-anydpi-v26/ic_launcher_round.xml'),
@@ -76,7 +75,7 @@ const pkgJsonPath = path.join(__dirname, '../package.json');
 if (fs.existsSync(buildGradlePath) && fs.existsSync(pkgJsonPath)) {
   try {
     const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
-    const versionName = pkg.version || '2.0.0';
+    const versionName = pkg.version || '2.0.1';
     const parts = versionName.split('.').map((n) => parseInt(n, 10) || 0);
     const versionCode = (parts[0] || 2) * 10000 + (parts[1] || 0) * 100 + (parts[2] || 0);
     let gradleContent = fs.readFileSync(buildGradlePath, 'utf8');
@@ -89,3 +88,100 @@ if (fs.existsSync(buildGradlePath) && fs.existsSync(pkgJsonPath)) {
   }
 }
 
+// 5. Patch MainActivity.java to enable 3rd-party OAuth cookies, clean Chrome User-Agent,
+// and intercept Android System Back Gesture to trigger ExitAppModal in React!
+const javaRoot = path.join(__dirname, '../android/app/src/main/java');
+if (fs.existsSync(javaRoot)) {
+  const findMainActivity = (dir) => {
+    const entries = fs.readdirSync(dir);
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry);
+      if (fs.statSync(fullPath).isDirectory()) {
+        const found = findMainActivity(fullPath);
+        if (found) return found;
+      } else if (entry === 'MainActivity.java') {
+        return fullPath;
+      }
+    }
+    return null;
+  };
+
+  const mainActivityPath = findMainActivity(javaRoot);
+  if (mainActivityPath) {
+    const existingSource = fs.readFileSync(mainActivityPath, 'utf8');
+    const pkgMatch = existingSource.match(/package\s+([a-zA-Z0-9_.]+);/);
+    const pkgName = pkgMatch ? pkgMatch[1] : 'com.lakshaylibrary.app';
+
+    const enhancedMainActivity = `package ${pkgName};
+
+import android.os.Bundle;
+import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import androidx.activity.OnBackPressedCallback;
+import com.getcapacitor.BridgeActivity;
+
+public class MainActivity extends BridgeActivity {
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        try {
+            WebView webView = getBridge().getWebView();
+            if (webView != null) {
+                // Enable first-party and third-party cookies for Firebase & Google OAuth redirects
+                CookieManager cookieManager = CookieManager.getInstance();
+                cookieManager.setAcceptCookie(true);
+                cookieManager.setAcceptThirdPartyCookies(webView, true);
+
+                WebSettings settings = webView.getSettings();
+                settings.setDomStorageEnabled(true);
+                settings.setDatabaseEnabled(true);
+                settings.setJavaScriptCanOpenWindowsAutomatically(true);
+                settings.setSupportMultipleWindows(false);
+
+                // Remove "; wv" marker so Google Sign-In never blocks or rejects the WebView
+                String ua = settings.getUserAgentString();
+                if (ua != null) {
+                    settings.setUserAgentString(ua.replace("; wv", ""));
+                }
+
+                // Expose Native Bridge so React ExitAppModal can close the Android app after animation
+                webView.addJavascriptInterface(new Object() {
+                    @JavascriptInterface
+                    public void closeApp() {
+                        runOnUiThread(() -> {
+                            finishAndRemoveTask();
+                        });
+                    }
+                }, "LakshayNativeBridge");
+            }
+        } catch (Exception ignored) {
+        }
+
+        // Intercept Android system Back gesture / Back button to prompt Exit Confirmation in React
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                try {
+                    WebView webView = getBridge() != null ? getBridge().getWebView() : null;
+                    if (webView != null) {
+                        webView.evaluateJavascript(
+                            "window.dispatchEvent(new CustomEvent('lakshay-native-back'));",
+                            null
+                        );
+                        return;
+                    }
+                } catch (Exception ignored) {
+                }
+                finish();
+            }
+        });
+    }
+}
+`;
+    fs.writeFileSync(mainActivityPath, enhancedMainActivity, 'utf8');
+    console.log(`Patched ${mainActivityPath} with OAuth CookieManager, User-Agent fix, and Back Gesture handler!`);
+  }
+}

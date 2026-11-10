@@ -44,6 +44,7 @@ import {
 import {
   getDriveAccessToken,
   getGoogleDriveSyncConfig,
+  initDriveAuth,
   pullMasterSnapshotFromGoogleDrive,
 } from './services/googleDriveSyncService';
 import { 
@@ -181,16 +182,32 @@ export default function App() {
   // Notification Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Intercept Android Hardware Back Button / Browser Back Gesture to ask before closing app
+  // Intercept Android System Back Gesture, Native Back Event & Browser Back Gesture to prompt Exit Confirmation
   useEffect(() => {
-    try {
-      window.history.pushState({ lakshayRootGuard: true }, '');
-    } catch {
-      // Ignore history API restrictions
-    }
+    const pushRootGuard = () => {
+      try {
+        if (!window.history.state?.lakshayRootGuard) {
+          window.history.pushState({ lakshayRootGuard: true }, '', window.location.href);
+        }
+      } catch {
+        // Ignore history API restrictions
+      }
+    };
 
-    const handlePopState = () => {
-      // If any modal or drawer is open, close it first and restore guard
+    pushRootGuard();
+
+    // Reinforce history guard on first user interaction (satisfies Chromium user-activation requirement for back-gesture popstate)
+    const handleFirstUserInteraction = () => {
+      try {
+        window.history.pushState({ lakshayRootGuard: true }, '', window.location.href);
+      } catch {
+        // Ignore
+      }
+    };
+    window.addEventListener('pointerdown', handleFirstUserInteraction, { once: true, passive: true });
+
+    const handleBackAction = () => {
+      // If any modal or drawer is open, close it first
       if (isDrawerOpen) {
         setIsDrawerOpen(false);
       } else if (isAddStudentOpen) {
@@ -224,19 +241,65 @@ export default function App() {
       } else if (isNotificationStatusOpen) {
         setIsNotificationStatusOpen(false);
       } else {
-        // On root screen: ask user before closing out the app
+        // On root screen: prompt Exit Confirmation & Exit Animation when user tries to exit by gesture
         setIsExitModalOpen(true);
       }
 
       try {
-        window.history.pushState({ lakshayRootGuard: true }, '');
+        window.history.pushState({ lakshayRootGuard: true }, '', window.location.href);
       } catch {
         // Ignore
       }
     };
 
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    // Edge back-swipe gesture detector for mobile web / PWA viewports
+    let edgeStartX: number | null = null;
+    let edgeStartY: number | null = null;
+
+    const handleEdgeTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const x = e.touches[0].clientX;
+      const y = e.touches[0].clientY;
+      const vw = window.innerWidth;
+      if (x <= 24 || x >= vw - 24) {
+        edgeStartX = x;
+        edgeStartY = y;
+      } else {
+        edgeStartX = null;
+        edgeStartY = null;
+      }
+    };
+
+    const handleEdgeTouchEnd = (e: TouchEvent) => {
+      if (edgeStartX === null || edgeStartY === null || e.changedTouches.length !== 1) return;
+      const endX = e.changedTouches[0].clientX;
+      const endY = e.changedTouches[0].clientY;
+      const vw = window.innerWidth;
+      const deltaX = Math.abs(endX - edgeStartX);
+      const deltaY = Math.abs(endY - edgeStartY);
+      const swipedInwardFromLeft = edgeStartX <= 24 && endX - edgeStartX > 70;
+      const swipedInwardFromRight = edgeStartX >= vw - 24 && edgeStartX - endX > 70;
+
+      edgeStartX = null;
+      edgeStartY = null;
+
+      if ((swipedInwardFromLeft || swipedInwardFromRight) && deltaX > deltaY * 1.8) {
+        handleBackAction();
+      }
+    };
+
+    window.addEventListener('popstate', handleBackAction);
+    window.addEventListener('lakshay-native-back', handleBackAction);
+    window.addEventListener('touchstart', handleEdgeTouchStart, { passive: true });
+    window.addEventListener('touchend', handleEdgeTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener('pointerdown', handleFirstUserInteraction);
+      window.removeEventListener('popstate', handleBackAction);
+      window.removeEventListener('lakshay-native-back', handleBackAction);
+      window.removeEventListener('touchstart', handleEdgeTouchStart);
+      window.removeEventListener('touchend', handleEdgeTouchEnd);
+    };
   }, [
     isDrawerOpen,
     isAddStudentOpen,
@@ -287,16 +350,25 @@ export default function App() {
     };
   }, []);
 
-  // Reopen Google Drive Sync modal automatically when returning from mobile OAuth redirect
+  // Initialize Google Drive Auth listener at app startup & reopen modal after OAuth redirect
   useEffect(() => {
     try {
-      if (sessionStorage.getItem('lakshay_library_pending_drive_redirect') === '1') {
+      const hasPendingRedirect =
+        sessionStorage.getItem('lakshay_library_pending_drive_redirect') === '1' ||
+        localStorage.getItem('lakshay_library_pending_drive_redirect') === '1';
+      if (hasPendingRedirect) {
         sessionStorage.removeItem('lakshay_library_pending_drive_redirect');
+        localStorage.removeItem('lakshay_library_pending_drive_redirect');
         setIsGoogleDriveSyncOpen(true);
       }
     } catch {
       // Ignore storage errors
     }
+
+    const unsubDriveAuth = initDriveAuth();
+    return () => {
+      unsubDriveAuth();
+    };
   }, []);
 
   // Silent Background Client Presence Engine (for Drive sync only, no UI indicator)
@@ -1111,7 +1183,6 @@ export default function App() {
         onOpenApkExport={() => setIsApkExportOpen(true)}
         onOpenWorkManager={() => setIsWorkManagerOpen(true)}
         onOpenGoogleDriveSync={() => setIsGoogleDriveSyncOpen(true)}
-        onRequestExitApp={() => setIsExitModalOpen(true)}
       />
 
       {/* Frosted-Glass Pill Expandable '+ Actions' FAB Menu */}

@@ -136,7 +136,20 @@ export const ExitAppModal: React.FC<ExitAppModalProps> = ({ isOpen, onCancel }) 
     setExitStage('ANIMATING_OUT');
 
     setTimeout(() => {
-      // Attempt native Capacitor / Android WebView exit if available
+      // 1. Native Android Bridge injected by MainActivity.java
+      try {
+        const win = window as unknown as {
+          LakshayNativeBridge?: { closeApp?: () => void };
+        };
+        if (win.LakshayNativeBridge && typeof win.LakshayNativeBridge.closeApp === 'function') {
+          win.LakshayNativeBridge.closeApp();
+          return;
+        }
+      } catch {
+        // Ignore
+      }
+
+      // 2. Capacitor / Cordova navigator.app.exitApp fallback
       try {
         const nav = navigator as unknown as { app?: { exitApp?: () => void } };
         if (nav.app && typeof nav.app.exitApp === 'function') {

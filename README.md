@@ -27,10 +27,10 @@ A production-grade, offline-first library and study hall management system built
    - Automatically creates a structured `Lakshay_Library_Master` root folder in Google Drive with dedicated subfolders:
      - `Lakshay_Library_Master/Master_Sync_Backups/` for primary writer / secondary follower daily database snapshots (`Lakshay_Library_Master_Sync.json`).
      - `Lakshay_Library_Master/Automated_Logs/` for real-time active client presence (`active_clients_status.json`) and automated crash diagnostics (`crash_and_error_logs.json`).
-6. **App Launch & Exit Confirmation Animations**:
-   - Branded launch splash animation (`AppLaunchSplash`) on startup and an interactive Exit Confirmation dialog (`ExitAppModal`) with a farewell animation when pressing Back on the home screen or selecting **Exit App** in the Navigation Drawer.
-7. **Native Mobile Ergonomics & Design (`v2.0.0` Production Release)**:
-   - Swipe-to-switch gestures between navigation tabs, custom warm-toned empty state illustrations, zero pre-populated demo records (`0` students on clean install), and a left-sliding Navigation Drawer with embedded GitHub version link (`v2.0.0`).
+6. **App Launch & Gesture-Based Exit Confirmation Animations**:
+   - Branded launch splash animation (`AppLaunchSplash`) on startup and an interactive Exit Confirmation dialog (`ExitAppModal`) with a farewell animation triggered when the user performs an Android Back gesture or edge back-swipe on the home screen.
+7. **Native Mobile Ergonomics & Design (`v2.0.1` Production Release)**:
+   - Swipe-to-switch gestures between navigation tabs, custom warm-toned empty state illustrations, zero pre-populated demo records (`0` students on clean install), and a left-sliding Navigation Drawer with embedded GitHub version link (`v2.0.1`).
 
 ---
 
@@ -48,7 +48,7 @@ A production-grade, offline-first library and study hall management system built
 │   ├── main.tsx            # React DOM entry point
 │   └── index.css           # Tailwind CSS imports & custom slide animations
 ├── capacitor.config.json   # Capacitor Android configuration (com.lakshaylibrary.app)
-├── package.json            # Dependencies & build scripts (v2.0.0)
+├── package.json            # Dependencies & build scripts (v2.0.1)
 └── vite.config.ts          # Vite bundler configuration
 ```
 
@@ -87,9 +87,9 @@ A production-grade, offline-first library and study hall management system built
 ### Option 1: Direct 1-Click APK Download from GitHub Releases (Recommended)
 Every tagged version of this app includes a pre-compiled `.apk` attached directly to **[GitHub Releases](https://github.com/keshav-sharp/lakshay-library-management/releases)**:
 
-- **Direct Latest APK URL (`v2.0.0`)**:  
+- **Direct Latest APK URL (`v2.0.1`)**:  
   👉 **[`https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk`](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
-- **All Version Releases (`v1.0.0` – `v2.0.0`)**:  
+- **All Version Releases (`v1.0.0` – `v2.0.1`)**:  
   👉 **[`https://github.com/keshav-sharp/lakshay-library-management/releases`](https://github.com/keshav-sharp/lakshay-library-management/releases)**
 
 ### Option 2: Download from GitHub Actions Build Artifacts

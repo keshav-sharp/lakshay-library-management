@@ -6,21 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v2.0.1] - 2026-11-10 (Google Sign-In Fix, Persistent Auth Storage & Gesture Exit)
+
+### Direct APK Download
+- 📦 **[Download `LakshayLibrary-v2.0.1.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 🔗 **[View Release Notes on GitHub (`v2.0.1`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v2.0.1)**
+
+### Fixed & Changed
+- **Fixed Google Sign-In `400 Malformed Request` Error on Android APK**:
+  - Updated Capacitor WebView navigation rules (`allowNavigation: ["*"]`) and User-Agent (`overrideUserAgent` + native WebView `; wv` token removal) so intermediate Google Sign-In redirects (`accounts.youtube.com/accounts/SetSID`, `*.google.com`, `*.firebaseapp.com`) stay inside the in-app WebView instead of breaking out to external Chrome without session cookies.
+  - Enabled native first-party and third-party cookies (`CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)`) and DOM/Database storage in `MainActivity.java`.
+- **Persistent Sign-In Session & Storage Location Display**:
+  - Added durable Sign-In session storage (`IndexedDB` via Firebase `browserLocalPersistence` + `LocalStorage` key `lakshay_library_google_auth_session_v2`) and added a **Where Sign-In & Sync Data Is Stored** card inside **Google Drive Daily Sync & Primary Role**.
+- **Gesture-Only Exit Confirmation & Native Back Integration**:
+  - Removed the `"Exit App"` button from the 3-bar Navigation Drawer.
+  - Wired Android's native `OnBackPressedDispatcher` (`lakshay-native-back` event + `LakshayNativeBridge.closeApp()`) and screen-edge back-swipe gestures to open the Exit Confirmation dialog & farewell animation when the user gestures to exit the app.
+- **Active Client Count, Heartbeat & Crash Logs Under Google Drive Sync**:
+  - Integrated live Active Client Count, 20-second Heartbeat monitor, and Crash & Error Logs directly inside the **Google Drive Daily Sync & Primary Role** modal and drawer subtitle.
+
+---
+
 ## [v2.0.0] - 2026-11-10 (Google Play Store Production Release)
 
 ### Direct APK Download
-- 📦 **[Download `LakshayLibrary-v2.0.0.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 📦 **[Download `LakshayLibrary-v2.0.0.apk`](https://github.com/keshav-sharp/lakshay-library-management/releases/download/v2.0.0/LakshayLibrary-v2.0.0.apk)**
 - 🔗 **[View Release Notes on GitHub (`v2.0.0`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v2.0.0)**
 
 ### Added
 - **App Launch Splash Animation**: Added a smooth, branded launch animation (`AppLaunchSplash`) featuring the Lakshay Library icon, golden-teal ambient glow, and loading progress bar on startup.
-- **Exit App Confirmation & Exit Animation**: Added an interactive Exit Confirmation dialog (`ExitAppModal`) triggered by the Android/browser Back button at the home screen or via the `"Exit App"` action in the Navigation Drawer, followed by a smooth farewell exit animation.
+- **Exit App Confirmation & Exit Animation**: Added an interactive Exit Confirmation dialog (`ExitAppModal`) triggered by the Android/browser Back gesture at the home screen, followed by a smooth farewell exit animation.
+- **Active Client Count, Heartbeat & Crash Logs in Google Drive Sync**: Added 3 sub-tabs (**1. Sync & Role**, **2. Heartbeat & Clients**, **3. Crash Logs**) under **Google Drive Daily Sync & Primary Role**.
 
 ### Changed
 - **Google Play Store Production Compliance (`com.lakshaylibrary.app`)**:
   - Updated Android application ID from `com.example.lakshaylibrary` to `com.lakshaylibrary.app`.
   - Reset default student, payment, and attendance databases to `0` records on fresh production initialization (`lakshay_library_prod_v2_0_0_clean`), removing sample/demo student seeds and the "Restore Previous Data" button.
-  - Removed all pre-shown diagnostic logs, `"1 Active"` client badges, developer simulator toolbars, and Kotlin source code tabs so the app runs full-screen like a standard consumer Google Play application.
+  - Removed all pre-shown diagnostic logs, `"1 Active"` header client badges, developer simulator toolbars, and Kotlin source code tabs so the app runs full-screen like a standard consumer Google Play application.
 
 ---
 

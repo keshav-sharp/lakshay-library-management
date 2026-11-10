@@ -23,7 +23,7 @@ import {
   LogOut,
 } from 'lucide-react';
 
-export const APP_VERSION = 'v2.0.0';
+export const APP_VERSION = 'v2.0.1';
 export const GITHUB_REPO_URL = 'https://github.com/keshav-sharp/lakshay-library-management';
 
 export interface DrawerMenuItem {
@@ -180,16 +180,6 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
       onClick: () => {
         handleCloseDrawer();
         if (onResetDatabase) onResetDatabase();
-      },
-    },
-    {
-      id: 'exit_app',
-      label: 'Exit App',
-      subtitle: 'Safely close Lakshay Library',
-      icon: LogOut,
-      onClick: () => {
-        handleCloseDrawer();
-        if (onRequestExitApp) onRequestExitApp();
       },
     },
   ];

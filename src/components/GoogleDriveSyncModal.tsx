@@ -6,13 +6,17 @@ import {
   DeviceSyncRole,
   DriveBackupFileMetadata,
   GoogleDriveSyncConfig,
+  GOOGLE_AUTH_SESSION_STORAGE_KEY,
   MASTER_DRIVE_BACKUP_FILENAME,
   MASTER_DRIVE_ROOT_FOLDER_NAME,
   MASTER_SYNC_SUBFOLDER_NAME,
   MASTER_DRIVE_SYNC_PATH,
+  MASTER_DRIVE_LOGS_PATH,
   findMasterSyncFileOnDrive,
+  getCurrentDriveUser,
   getDriveAccessToken,
   getGoogleDriveSyncConfig,
+  getStoredGoogleAuthSession,
   googleDriveLogout,
   googleDriveSignIn,
   initDriveAuth,
@@ -87,7 +91,8 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
   const { darkModeClass, isDarkMode } = useTheme();
   const [activeSubTab, setActiveSubTab] = useState<DriveModalSubTab>('SYNC_ROLE');
 
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => getCurrentDriveUser());
+  const [storedAuthSession, setStoredAuthSession] = useState(() => getStoredGoogleAuthSession());
   const [accessToken, setAccessToken] = useState<string | null>(() => getDriveAccessToken());
   const [needsAuth, setNeedsAuth] = useState<boolean>(() => !getDriveAccessToken());
   const [isSigningIn, setIsSigningIn] = useState(false);
@@ -133,12 +138,14 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
     const unsub = initDriveAuth(
       (authedUser, token) => {
         setUser(authedUser);
+        setStoredAuthSession(getStoredGoogleAuthSession());
         setAccessToken(token);
         setNeedsAuth(false);
         refreshDriveFileMetadata(token);
       },
       () => {
         setUser(null);
+        setStoredAuthSession(null);
         setAccessToken(null);
         setNeedsAuth(true);
       }
@@ -149,6 +156,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setSyncConfig(getGoogleDriveSyncConfig());
+      setStoredAuthSession(getStoredGoogleAuthSession());
       const updatedClients = sendPresenceHeartbeat();
       setClients(updatedClients);
       setCrashLogs(getCrashLogs());
@@ -187,6 +195,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
       const result = await googleDriveSignIn();
       if (result) {
         setUser(result.user);
+        setStoredAuthSession(getStoredGoogleAuthSession());
         setAccessToken(result.accessToken);
         setNeedsAuth(false);
         onTriggerToast(
@@ -687,15 +696,15 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                 </div>
               </div>
 
-              {/* 2. Google Account Connection & Official Sign in with Google Button */}
+              {/* 2. Google Account Connection & Sign-In Data Storage */}
               <div className="p-4 rounded-2xl border border-slate-200/60 bg-white space-y-3.5">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      2. Google Drive Account &amp; Master Folder
+                      2. Google Drive Account &amp; Sign-In Storage
                     </h3>
                     <p className="text-xs text-slate-600 mt-0.5">
-                      Location:{' '}
+                      Master Path:{' '}
                       <code className="font-mono text-[11px] text-amber-700 font-semibold">
                         {MASTER_DRIVE_SYNC_PATH}
                       </code>
@@ -712,6 +721,44 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                       <span>Sign Out</span>
                     </button>
                   )}
+                </div>
+
+                {/* Where Sign-In & Sync Data Is Stored Card */}
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70 text-[11px] space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold uppercase tracking-wider text-slate-700">
+                      Where Sign-In &amp; Sync Data Is Stored
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-bold ${
+                        !needsAuth && accessToken
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {!needsAuth && accessToken ? 'SESSION PERSISTED' : 'AWAITING SIGN-IN'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-1 text-slate-600 font-mono text-[10px]">
+                    <div>
+                      <span className="font-semibold text-slate-700">1. Device Sign-In Session:</span>{' '}
+                      IndexedDB + LocalStorage (<code>{GOOGLE_AUTH_SESSION_STORAGE_KEY}</code>)
+                    </div>
+                    <div>
+                      <span className="font-semibold text-slate-700">2. Google Drive Master Sync:</span>{' '}
+                      <code>{MASTER_DRIVE_SYNC_PATH}</code>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-slate-700">3. Heartbeat &amp; Crash Logs:</span>{' '}
+                      <code>{MASTER_DRIVE_LOGS_PATH}/</code>
+                    </div>
+                    {storedAuthSession?.savedAtISO && (
+                      <div className="text-emerald-700 font-sans text-[11px] pt-0.5">
+                        Last Sign-In Session Saved:{' '}
+                        <strong>{new Date(storedAuthSession.savedAtISO).toLocaleString()}</strong>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {needsAuth || !accessToken ? (
@@ -775,10 +822,14 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                         <div className="truncate">
                           <span className="font-bold text-slate-900">
-                            {user?.displayName || 'Google Drive Connected'}
+                            {user?.displayName ||
+                              storedAuthSession?.displayName ||
+                              'Google Drive Connected'}
                           </span>
-                          {user?.email && (
-                            <span className="text-slate-500 ml-1.5">({user.email})</span>
+                          {(user?.email || storedAuthSession?.email) && (
+                            <span className="text-slate-500 ml-1.5">
+                              ({user?.email || storedAuthSession?.email})
+                            </span>
                           )}
                         </div>
                       </div>
