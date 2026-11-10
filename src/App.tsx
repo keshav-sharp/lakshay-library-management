@@ -46,6 +46,7 @@ import {
   getGoogleDriveSyncConfig,
   initDriveAuth,
   pullMasterSnapshotFromGoogleDrive,
+  checkAndApplyLiveRelaySync,
 } from './services/googleDriveSyncService';
 import { 
   Users, 
@@ -376,6 +377,53 @@ export default function App() {
     const cleanupPresence = initClientPresenceEngine();
     return () => {
       cleanupPresence();
+    };
+  }, []);
+
+  // Active-State Real-Time Live Sync:
+  // When Secondary device is active in foreground, sync immediately whenever new data is entered on Primary
+  useEffect(() => {
+    const runActiveLiveSync = () => {
+      const config = getGoogleDriveSyncConfig();
+      if (config.deviceRole !== 'SECONDARY' || !config.masterSyncChannelTopic) return;
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+
+      checkAndApplyLiveRelaySync()
+        .then((res) => {
+          if (res.synced) {
+            setToastMessage(
+              `⚡ Live Synced: Received updated ${res.studentCount} students from ${res.primaryDeviceName || 'Primary Phone'}!`
+            );
+            setTimeout(() => setToastMessage(null), 4500);
+          }
+        })
+        .catch(() => {});
+    };
+
+    // Immediate sync on launch
+    runActiveLiveSync();
+
+    // Fast active-state poll every 3.5 seconds
+    const liveSyncInterval = setInterval(runActiveLiveSync, 3500);
+
+    // Immediate sync on app focus / visibility change
+    const handleActiveResume = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        runActiveLiveSync();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', handleActiveResume);
+      document.addEventListener('visibilitychange', handleActiveResume);
+    }
+
+    return () => {
+      clearInterval(liveSyncInterval);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', handleActiveResume);
+        document.removeEventListener('visibilitychange', handleActiveResume);
+      }
     };
   }, []);
 

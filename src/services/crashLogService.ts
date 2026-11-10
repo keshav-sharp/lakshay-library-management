@@ -1,4 +1,4 @@
-import { getDriveAccessToken } from './googleDriveSyncService';
+import { getDriveAccessToken, getGoogleDriveSyncConfig } from './googleDriveSyncService';
 import { uploadJsonToLogsFolder, CRASH_LOGS_FILENAME } from './driveLogsService';
 
 export interface BreadcrumbItem {
@@ -20,6 +20,9 @@ export interface CrashLogEntry {
   platform: string;
   breadcrumbs: BreadcrumbItem[];
   syncedToDrive: boolean;
+  originDeviceId?: string;
+  originDeviceName?: string;
+  originDeviceRole?: string;
 }
 
 const CRASH_LOGS_STORAGE_KEY = 'lakshay_library_crash_logs_v1';
@@ -106,7 +109,106 @@ export const clearCrashLogs = () => {
 };
 
 /**
- * Logs a crash, error, or unhandled rejection, saves to localStorage, and auto-pushes to Google Drive if authorized.
+ * Publishes a crash log to the live Cloud Relay topic (${topic}_logs)
+ * so Secondary device errors are transmitted to Primary in real time.
+ */
+export const broadcastCrashLogToCloudRelay = async (entry: CrashLogEntry): Promise<void> => {
+  const syncConfig = getGoogleDriveSyncConfig();
+  const cleanId = (syncConfig.deviceId || 'default').replace(/[^a-zA-Z0-9]/g, '');
+  const topic = syncConfig.masterSyncChannelTopic || `lakshay_ch_${cleanId}`;
+  const logsTopic = `${topic}_logs`;
+
+  try {
+    await fetch(`https://ntfy.sh/${logsTopic}`, {
+      method: 'POST',
+      headers: {
+        'Title': `Lakshay ${syncConfig.deviceRole || 'DEVICE'} Log: ${entry.severity}`,
+        'Priority': entry.severity === 'CRITICAL' ? '4' : '3',
+      },
+      body: JSON.stringify({
+        type: 'CRASH_LOG',
+        deviceId: syncConfig.deviceId,
+        deviceName: syncConfig.deviceName,
+        deviceRole: syncConfig.deviceRole,
+        entry: {
+          ...entry,
+          originDeviceId: syncConfig.deviceId,
+          originDeviceName: syncConfig.deviceName,
+          originDeviceRole: syncConfig.deviceRole,
+        },
+      }),
+    });
+  } catch {
+    // Non-fatal background log broadcast
+  }
+};
+
+/**
+ * Polls peer crash & error logs from the Cloud Sync Relay channel
+ * to capture Secondary device errors on Primary without requiring Google Drive auth on Secondary.
+ */
+export const fetchPeerCrashLogsFromCloudRelay = async (): Promise<CrashLogEntry[]> => {
+  const syncConfig = getGoogleDriveSyncConfig();
+  const cleanId = (syncConfig.deviceId || 'default').replace(/[^a-zA-Z0-9]/g, '');
+  const topic = syncConfig.masterSyncChannelTopic || `lakshay_ch_${cleanId}`;
+  const logsTopic = `${topic}_logs`;
+
+  try {
+    const res = await fetch(`https://ntfy.sh/${logsTopic}/json?poll=1&since=24h`);
+    if (!res.ok) return getCrashLogs();
+    const text = (await res.text()).trim();
+    if (!text) return getCrashLogs();
+
+    const lines = text.split('\n').filter(Boolean);
+    const existing = getCrashLogs();
+    const existingIds = new Set(existing.map((l) => l.id));
+    const newLogs: CrashLogEntry[] = [];
+
+    lines.forEach((line) => {
+      try {
+        const item = JSON.parse(line);
+        if (item.message) {
+          const parsed = JSON.parse(item.message);
+          if (parsed.type === 'CRASH_LOG' && parsed.entry && !existingIds.has(parsed.entry.id)) {
+            existingIds.add(parsed.entry.id);
+            const devLabel = `[${parsed.deviceRole || 'DEVICE'}: ${parsed.deviceName || 'Secondary'}]`;
+            const formattedMessage = parsed.entry.message.startsWith('[')
+              ? parsed.entry.message
+              : `${devLabel} ${parsed.entry.message}`;
+
+            const remoteEntry: CrashLogEntry = {
+              ...parsed.entry,
+              message: formattedMessage,
+              originDeviceId: parsed.deviceId,
+              originDeviceName: parsed.deviceName,
+              originDeviceRole: parsed.deviceRole,
+            };
+            newLogs.push(remoteEntry);
+          }
+        }
+      } catch {
+        // Ignore parse error
+      }
+    });
+
+    if (newLogs.length > 0) {
+      const merged = [...newLogs, ...existing].slice(0, MAX_LOGS);
+      try {
+        localStorage.setItem(CRASH_LOGS_STORAGE_KEY, JSON.stringify(merged));
+      } catch {
+        // Ignore
+      }
+      notifyListeners(merged);
+      return merged;
+    }
+    return existing;
+  } catch {
+    return getCrashLogs();
+  }
+};
+
+/**
+ * Logs a crash, error, or unhandled rejection, saves to localStorage, and auto-pushes to Google Drive & Cloud Relay.
  */
 export const logCrash = (
   error: Error | string,
@@ -120,6 +222,7 @@ export const logCrash = (
   const isErrorObj = error instanceof Error;
   const message = isErrorObj ? error.message : String(error);
   const stack = isErrorObj ? error.stack : undefined;
+  const syncConfig = getGoogleDriveSyncConfig();
 
   const entry: CrashLogEntry = {
     id: `crash_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -134,6 +237,9 @@ export const logCrash = (
     platform: typeof navigator !== 'undefined' ? navigator.platform : 'Unknown',
     breadcrumbs: getBreadcrumbs(),
     syncedToDrive: false,
+    originDeviceId: syncConfig.deviceId,
+    originDeviceName: syncConfig.deviceName,
+    originDeviceRole: syncConfig.deviceRole,
   };
 
   const existing = getCrashLogs();
@@ -146,6 +252,9 @@ export const logCrash = (
   }
 
   notifyListeners(updated);
+
+  // Auto-broadcast log to Cloud Relay topic immediately so Secondary device logs reach Primary right away
+  broadcastCrashLogToCloudRelay(entry).catch(() => {});
 
   // Auto-push to Google Drive `Lakshay_Library_Logs` folder if access token is available
   const token = getDriveAccessToken();

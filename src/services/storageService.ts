@@ -39,6 +39,7 @@ ensureProductionCleanInit();
 
 type Listener = () => void;
 const listeners: Set<Listener> = new Set();
+let isImportingRemoteSnapshot = false;
 
 const notifyListeners = () => {
   listeners.forEach((listener) => {
@@ -48,6 +49,17 @@ const notifyListeners = () => {
       console.error('Listener notification error', e);
     }
   });
+
+  // Automatically trigger real-time auto-sync when new data is entered locally
+  if (!isImportingRemoteSnapshot) {
+    try {
+      import('./googleDriveSyncService').then((m) => {
+        m.triggerLivePrimaryAutoSync();
+      }).catch(() => {});
+    } catch {
+      // Ignore
+    }
+  }
 };
 
 export const subscribeToFirestore = (callback: Listener): (() => void) => {
@@ -413,16 +425,21 @@ export const importSyncedFirestoreSnapshot = (
   payments: Record<string, PaymentRecord[]>,
   dailyAttendance?: DailyAttendanceRecord[]
 ) => {
-  if (Array.isArray(students)) {
-    localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(students));
+  isImportingRemoteSnapshot = true;
+  try {
+    if (Array.isArray(students)) {
+      localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(students));
+    }
+    if (payments && typeof payments === 'object') {
+      localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(payments));
+    }
+    if (Array.isArray(dailyAttendance)) {
+      localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(dailyAttendance));
+    }
+    notifyListeners();
+  } finally {
+    isImportingRemoteSnapshot = false;
   }
-  if (payments && typeof payments === 'object') {
-    localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(payments));
-  }
-  if (Array.isArray(dailyAttendance)) {
-    localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(dailyAttendance));
-  }
-  notifyListeners();
 };
 
 

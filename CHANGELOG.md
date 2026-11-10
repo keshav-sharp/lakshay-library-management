@@ -6,10 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v2.0.5] - 2026-11-10 (Real-Time Active-State Auto-Sync & Cross-Device Telemetry / Secondary Device Logs)
+
+### Direct APK Download
+- 📦 **[Download `LakshayLibrary-v2.0.5.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 🔗 **[View Release Notes on GitHub (`v2.0.5`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v2.0.5)**
+
+### Added & Improved
+- **Instant Real-Time Auto-Sync on Active State**:
+  - Configured debounced instant auto-sync (`triggerLivePrimaryAutoSync`, 800ms) on the Primary Phone whenever new data is entered or updated locally (students, payments, attendance records, shifts, or seat layout changes).
+  - Added an active-state live sync listener in `src/App.tsx` for Secondary devices: when the app is active in foreground (`document.visibilityState === 'visible'` and `window.onfocus`), it polls for new data every 3.5 seconds and syncs right away, displaying an unobtrusive live-synced confirmation toast.
+  - Guarded against circular re-broadcast loops using `isImportingRemoteSnapshot` during remote snapshot hydration.
+- **Cross-Device Client Presence & Session Capture**:
+  - Connected the client presence engine (`initClientPresenceEngine`) with the shared Cloud Relay topic (`${topic}_presence`), transmitting heartbeat records every 15s across all active Primary & Secondary devices.
+  - Active sessions display device name, role (PRIMARY / SECONDARY), OS platform, browser, online/idle status, and last active timestamp in real-time.
+- **Secondary Device Crash & Error Logs Telemetry**:
+  - Enhanced `src/services/crashLogService.ts` to automatically broadcast unhandled errors, promise rejections, and test logs from Secondary devices to the shared Cloud Relay topic (`${topic}_logs`).
+  - Merges Secondary device errors into the Primary device's crash log viewer with clear `[SECONDARY: <DeviceName>]` labels without requiring Google OAuth on the Secondary device.
+
+---
+
 ## [v2.0.4] - 2026-11-10 (Seamless `LK-...` Cloud Relay Sync Key & Offline `LKSYNC1:...` Package)
 
 ### Direct APK Download
-- 📦 **[Download `LakshayLibrary-v2.0.4.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 📦 **[Download `LakshayLibrary-v2.0.4.apk`](https://github.com/keshav-sharp/lakshay-library-management/releases/download/v2.0.4/LakshayLibrary-v2.0.4.apk)**
 - 🔗 **[View Release Notes on GitHub (`v2.0.4`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v2.0.4)**
 
 ### Fixed & Improved

@@ -13,6 +13,14 @@ const notifyShiftListeners = () => {
       console.error(e);
     }
   });
+
+  try {
+    import('./googleDriveSyncService').then((m) => {
+      m.triggerLivePrimaryAutoSync();
+    }).catch(() => {});
+  } catch {
+    // Ignore
+  }
 };
 
 export const getStoredShifts = (): ShiftItem[] => {

@@ -33,6 +33,8 @@ import {
   subscribeToActiveClients,
   sendPresenceHeartbeat,
   syncActiveClientsWithGoogleDrive,
+  broadcastPresenceToCloudRelay,
+  fetchPeerPresenceFromCloudRelay,
   ActiveClientRecord,
 } from '../services/clientPresenceService';
 import {
@@ -42,6 +44,7 @@ import {
   exportCrashLogsAsJson,
   logCrash,
   syncCrashLogsToGoogleDrive,
+  fetchPeerCrashLogsFromCloudRelay,
   CrashLogEntry,
 } from '../services/crashLogService';
 import {
@@ -199,6 +202,11 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
           refreshDriveFileMetadata(null);
         }
       }
+    }
+
+    if (isOpen) {
+      fetchPeerPresenceFromCloudRelay().then((updated) => setClients([...updated])).catch(() => {});
+      fetchPeerCrashLogsFromCloudRelay().then((logs) => setCrashLogs([...logs])).catch(() => {});
     }
 
     const unsubClients = subscribeToActiveClients((updated) => setClients([...updated]));
@@ -433,7 +441,10 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
   const handleManualHeartbeatPing = () => {
     const updated = sendPresenceHeartbeat();
     setClients(updated);
-    onTriggerToast('Heartbeat ping sent! Active client timestamp refreshed.');
+    broadcastPresenceToCloudRelay().catch(() => {});
+    fetchPeerPresenceFromCloudRelay().then((peers) => setClients([...peers])).catch(() => {});
+    fetchPeerCrashLogsFromCloudRelay().then((logs) => setCrashLogs([...logs])).catch(() => {});
+    onTriggerToast('Heartbeat ping sent! Active client sessions and secondary device logs refreshed.');
   };
 
   const handleSyncHeartbeatAndCrashLogsToDrive = async () => {

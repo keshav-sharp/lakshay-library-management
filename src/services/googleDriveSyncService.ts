@@ -602,6 +602,41 @@ export const buildCurrentMasterSyncPayload = (): MasterSyncPayload => {
 };
 
 /**
+ * Triggers an immediate debounced auto-sync to Cloud Relay & Google Drive when new data is entered
+ * on the Primary device. Runs seamlessly in the background without blocking the UI.
+ */
+let autoSyncTimeout: ReturnType<typeof setTimeout> | null = null;
+let isAutoSyncing = false;
+
+export const triggerLivePrimaryAutoSync = (delayMs: number = 800) => {
+  const config = getGoogleDriveSyncConfig();
+  if (config.deviceRole !== 'PRIMARY') return;
+
+  if (autoSyncTimeout) {
+    clearTimeout(autoSyncTimeout);
+  }
+
+  autoSyncTimeout = setTimeout(async () => {
+    if (isAutoSyncing) return;
+    try {
+      isAutoSyncing = true;
+      // 1. Immediately publish to the instant Cloud Relay
+      await publishMasterSnapshotToSyncKeyRelay();
+
+      // 2. If Google Drive access token is available in memory, also push snapshot to Google Drive
+      const token = getDriveAccessToken();
+      if (token && config.autoDailySyncEnabled) {
+        await pushPrimarySnapshotToGoogleDrive(token, config.lastDriveFileId).catch(() => {});
+      }
+    } catch {
+      // Non-fatal background sync
+    } finally {
+      isAutoSyncing = false;
+    }
+  }, delayMs);
+};
+
+/**
  * Generates a 100% self-contained, offline-capable Sync Code (`LKSYNC1:...`)
  * that embeds all student, seat, shift, payment, and attendance records directly
  * inside the string so it can be pasted on a Secondary Phone with zero server dependencies.
@@ -789,7 +824,7 @@ export const publishMasterSnapshotToSyncKeyRelay = async (): Promise<{
 /**
  * Applies a downloaded or decoded MasterSyncPayload to local storage and updates sync config.
  */
-const applyMasterSyncPayloadLocally = (
+export const applyMasterSyncPayloadLocally = (
   payload: MasterSyncPayload,
   sourceFileOrKeyId: string
 ): {
@@ -835,6 +870,83 @@ const applyMasterSyncPayloadLocally = (
     syncedAt: payload.syncedAt || now.toISOString(),
     studentCount: payload.data.students.length,
   };
+};
+
+/**
+ * Checks the live Cloud Relay channel for any newer snapshot published by Primary.
+ * If found and newer than last sync, it downloads and applies it locally right away.
+ * Returns { synced: true, ... } if new data was applied, or { synced: false } if already up-to-date.
+ */
+let isCheckingLiveRelay = false;
+export const checkAndApplyLiveRelaySync = async (): Promise<{
+  synced: boolean;
+  studentCount?: number;
+  primaryDeviceName?: string;
+  syncedAt?: string;
+}> => {
+  const config = getGoogleDriveSyncConfig();
+  if (config.deviceRole !== 'SECONDARY' || !config.masterSyncChannelTopic) {
+    return { synced: false };
+  }
+  if (isCheckingLiveRelay) return { synced: false };
+
+  try {
+    isCheckingLiveRelay = true;
+    const pollRes = await fetch(
+      `https://ntfy.sh/${config.masterSyncChannelTopic}/json?poll=1&since=1h`
+    );
+    if (!pollRes.ok) return { synced: false };
+    const text = (await pollRes.text()).trim();
+    if (!text) return { synced: false };
+
+    const lines = text
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => {
+        try {
+          return JSON.parse(l) as { id?: string; attachment?: { url?: string }; time?: number };
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean) as { id?: string; attachment?: { url?: string }; time?: number }[];
+
+    const newestMsg = [...lines].reverse().find((m) => m.id && m.attachment?.url);
+    if (!newestMsg?.id) return { synced: false };
+
+    const candidateFileId = `LK-${newestMsg.id}`;
+    if (config.lastDriveFileId === candidateFileId) {
+      // Already at this exact snapshot
+      return { synced: false };
+    }
+
+    const newerFileRes = await fetch(`https://ntfy.sh/file/${newestMsg.id}.json`);
+    if (!newerFileRes.ok) return { synced: false };
+
+    const newerPayload = (await newerFileRes.json()) as MasterSyncPayload;
+    if (!newerPayload?.data?.students) return { synced: false };
+
+    // If payload has a syncedAt, compare with lastSyncedAtISO
+    if (config.lastSyncedAtISO && newerPayload.syncedAt) {
+      const lastTime = new Date(config.lastSyncedAtISO).getTime();
+      const payloadTime = new Date(newerPayload.syncedAt).getTime();
+      if (payloadTime <= lastTime && config.lastDriveFileId === candidateFileId) {
+        return { synced: false };
+      }
+    }
+
+    const result = applyMasterSyncPayloadLocally(newerPayload, candidateFileId);
+    return {
+      synced: true,
+      studentCount: result.studentCount,
+      primaryDeviceName: result.primaryDeviceName,
+      syncedAt: result.syncedAt,
+    };
+  } catch {
+    return { synced: false };
+  } finally {
+    isCheckingLiveRelay = false;
+  }
 };
 
 /**
