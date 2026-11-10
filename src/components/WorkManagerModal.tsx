@@ -195,10 +195,10 @@ export const WorkManagerModal: React.FC<WorkManagerModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900">
-                Android WorkManager Background Tasks
+                Auto Backups &amp; Fee Reminders
               </h3>
               <p className="text-xs text-slate-500">
-                Daily JSON Database Backup &bull; 3-Day Fee Reminder Worker
+                Daily Local Backup &bull; Automated Fee Alerts
               </p>
             </div>
           </div>
@@ -215,7 +215,7 @@ export const WorkManagerModal: React.FC<WorkManagerModalProps> = ({
                 }`}
               >
                 <FileJson className="w-3.5 h-3.5" />
-                <span>Daily JSON Backup</span>
+                <span>Daily Backup</span>
               </button>
               <button
                 type="button"
@@ -227,19 +227,7 @@ export const WorkManagerModal: React.FC<WorkManagerModalProps> = ({
                 }`}
               >
                 <Bell className="w-3.5 h-3.5" />
-                <span>3-Day Alerts</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('code')}
-                className={`px-3 py-1 rounded-full transition-all flex items-center gap-1 ${
-                  activeTab === 'code'
-                    ? 'bg-amber-600 text-white shadow-xs font-semibold'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Code2 className="w-3.5 h-3.5" />
-                <span>Worker.kt</span>
+                <span>Fee Alerts</span>
               </button>
             </div>
 
@@ -429,24 +417,6 @@ export const WorkManagerModal: React.FC<WorkManagerModalProps> = ({
                 </div>
               )}
             </div>
-
-            {/* Live JSON Snapshot Inspector */}
-            {selectedPreviewBackup && (
-              <div className="rounded-2xl border border-slate-800 overflow-hidden bg-slate-950">
-                <div className="px-3.5 py-2 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-[11px] text-slate-300">
-                  <span className="font-mono text-amber-400 truncate">
-                    Preview: {selectedPreviewBackup.fileName}
-                  </span>
-                  <span className="font-mono text-slate-400">
-                    {(selectedPreviewBackup.sizeBytes / 1024).toFixed(1)} KB
-                  </span>
-                </div>
-                <pre className="p-3.5 text-[11px] font-mono text-slate-200 max-h-48 overflow-auto leading-relaxed">
-                  {selectedPreviewBackup.jsonPayload.slice(0, 1400)}
-                  {selectedPreviewBackup.jsonPayload.length > 1400 ? '\n  ...\n}' : ''}
-                </pre>
-              </div>
-            )}
           </div>
         )}
 

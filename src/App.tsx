@@ -8,7 +8,6 @@ import {
   getDaysDifference, 
   getStoredPayments, 
   resetFirestoreToDefaults,
-  restorePreviousOrSampleData,
   formatDueDateDisplay
 } from './services/storageService';
 import { getStoredShifts, subscribeToShifts } from './services/shiftService';
@@ -30,17 +29,12 @@ import { PrintableLibraryCardModal } from './components/PrintableLibraryCardModa
 import { ExpandableFabMenu } from './components/ExpandableFabMenu';
 import { NavigationDrawer } from './components/NavigationDrawer';
 import { SettingsModal } from './components/SettingsModal';
-import { KotlinCodeHighlighter } from './components/KotlinCodeHighlighter';
 import { MetricsHeaderSkeleton, StudentListSkeleton } from './components/DashboardSkeleton';
 import { ApkExportModal } from './components/ApkExportModal';
 import { GoogleDriveSyncModal } from './components/GoogleDriveSyncModal';
-import { DiagnosticsLogsModal } from './components/DiagnosticsLogsModal';
 import { UpiPaymentQrModal } from './components/UpiPaymentQrModal';
-import {
-  initClientPresenceEngine,
-  subscribeToActiveClients,
-  getActiveOnlineClientsCount,
-} from './services/clientPresenceService';
+import { AppLaunchSplash, ExitAppModal } from './components/AppLifecycleAnimations';
+import { initClientPresenceEngine } from './services/clientPresenceService';
 import { addBreadcrumb } from './services/crashLogService';
 import {
   exportStudentsToCSV,
@@ -59,29 +53,20 @@ import {
   Search, 
   Plus, 
   RotateCcw, 
-  Smartphone, 
-  Monitor, 
   Bell, 
-  Armchair, 
-  Code2, 
-  BookOpen, 
-  CheckCircle2,
   Filter,
   BarChart3,
   Settings2,
   Download,
   FileJson,
-  PackageCheck,
   Cloud,
   CheckSquare,
   MessageSquare,
   ArrowUpDown,
   Menu,
   X,
-  Activity,
   Clock
 } from 'lucide-react';
-import { KOTLIN_CODE_SNIPPETS } from './data/kotlinCodeSnippets';
 
 export type StudentSortOption =
   | 'OVERDUE_PRIORITY'
@@ -105,15 +90,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabScreen>('ALL');
   const [prevTabIndex, setPrevTabIndex] = useState<number>(0);
   const [tabDirection, setTabDirection] = useState<'left' | 'right'>('right');
-  const [deviceMode, setDeviceMode] = useState<'mobile' | 'desktop'>('mobile');
   const [searchQuery, setSearchQuery] = useState('');
   const [shiftFilter, setShiftFilter] = useState<string>('ALL');
   // Automated default sorting rule: prioritize students with the most overdue payments to the top upon app launch
   const [sortOption, setSortOption] = useState<StudentSortOption>('OVERDUE_PRIORITY');
-
-  // Active clients & diagnostics state
-  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
-  const [onlineClientsCount, setOnlineClientsCount] = useState<number>(getActiveOnlineClientsCount());
 
   const handleTabSwitch = (newTab: TabScreen) => {
     if (newTab === activeTab) return;
@@ -161,7 +141,7 @@ export default function App() {
   } = useTheme();
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
-  // Firestore, Shifts & Seats Live State + Initial Fetching Shimmer State
+  // Live State + Initial Fetching Shimmer State
   const [isInitialFetching, setIsInitialFetching] = useState<boolean>(true);
   const [students, setStudents] = useState<Student[]>(getStoredStudents());
   const [allPayments, setAllPayments] = useState(getStoredPayments());
@@ -181,8 +161,6 @@ export default function App() {
   const [studentForQrPass, setStudentForQrPass] = useState<Student | null>(null);
   const [isCheckInScannerOpen, setIsCheckInScannerOpen] = useState(false);
   const [studentToPreScan, setStudentToPreScan] = useState<Student | null>(null);
-  const [isCodeViewerOpen, setIsCodeViewerOpen] = useState(false);
-  const [selectedCodeSnippetIndex, setSelectedCodeSnippetIndex] = useState(0);
   const [isApkExportOpen, setIsApkExportOpen] = useState(false);
   const [isGoogleDriveSyncOpen, setIsGoogleDriveSyncOpen] = useState(false);
   const [isUpiPaymentQrOpen, setIsUpiPaymentQrOpen] = useState(false);
@@ -196,10 +174,89 @@ export default function App() {
   // Printable Card Modal state
   const [studentForPrintCard, setStudentForPrintCard] = useState<Student | null>(null);
 
+  // App Launch Splash & Exit Confirmation Modal state
+  const [isLaunching, setIsLaunching] = useState(true);
+  const [isExitModalOpen, setIsExitModalOpen] = useState(false);
+
   // Notification Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Subscriptions & Initial Firestore Snapshot Hydration
+  // Intercept Android Hardware Back Button / Browser Back Gesture to ask before closing app
+  useEffect(() => {
+    try {
+      window.history.pushState({ lakshayRootGuard: true }, '');
+    } catch {
+      // Ignore history API restrictions
+    }
+
+    const handlePopState = () => {
+      // If any modal or drawer is open, close it first and restore guard
+      if (isDrawerOpen) {
+        setIsDrawerOpen(false);
+      } else if (isAddStudentOpen) {
+        setIsAddStudentOpen(false);
+      } else if (selectedStudentForDetail) {
+        setSelectedStudentForDetail(null);
+      } else if (studentToMarkPaid) {
+        setStudentToMarkPaid(null);
+      } else if (studentForWhatsApp) {
+        setStudentForWhatsApp(null);
+      } else if (isWorkManagerOpen) {
+        setIsWorkManagerOpen(false);
+      } else if (isSeatMatrixOpen) {
+        setIsSeatMatrixOpen(false);
+      } else if (isShiftManagerOpen) {
+        setIsShiftManagerOpen(false);
+      } else if (studentForQrPass) {
+        setStudentForQrPass(null);
+      } else if (isCheckInScannerOpen) {
+        setIsCheckInScannerOpen(false);
+      } else if (isBulkWhatsAppOpen) {
+        setIsBulkWhatsAppOpen(false);
+      } else if (studentForPrintCard) {
+        setStudentForPrintCard(null);
+      } else if (isSettingsOpen) {
+        setIsSettingsOpen(false);
+      } else if (isGoogleDriveSyncOpen) {
+        setIsGoogleDriveSyncOpen(false);
+      } else if (isUpiPaymentQrOpen) {
+        setIsUpiPaymentQrOpen(false);
+      } else if (isNotificationStatusOpen) {
+        setIsNotificationStatusOpen(false);
+      } else {
+        // On root screen: ask user before closing out the app
+        setIsExitModalOpen(true);
+      }
+
+      try {
+        window.history.pushState({ lakshayRootGuard: true }, '');
+      } catch {
+        // Ignore
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [
+    isDrawerOpen,
+    isAddStudentOpen,
+    selectedStudentForDetail,
+    studentToMarkPaid,
+    studentForWhatsApp,
+    isWorkManagerOpen,
+    isSeatMatrixOpen,
+    isShiftManagerOpen,
+    studentForQrPass,
+    isCheckInScannerOpen,
+    isBulkWhatsAppOpen,
+    studentForPrintCard,
+    isSettingsOpen,
+    isGoogleDriveSyncOpen,
+    isUpiPaymentQrOpen,
+    isNotificationStatusOpen,
+  ]);
+
+  // Subscriptions & Initial Hydration
   useEffect(() => {
     const initialFetchTimer = setTimeout(() => {
       setStudents([...getStoredStudents()]);
@@ -207,7 +264,7 @@ export default function App() {
       setShifts([...getStoredShifts()]);
       setSeats([...getStoredSeats()]);
       setIsInitialFetching(false);
-    }, 650);
+    }, 350);
 
     const unsubFirestore = subscribeToFirestore(() => {
       setStudents([...getStoredStudents()]);
@@ -242,35 +299,20 @@ export default function App() {
     }
   }, []);
 
-  // Real-time Active Client Presence & Heartbeat Engine
+  // Silent Background Client Presence Engine (for Drive sync only, no UI indicator)
   useEffect(() => {
     const cleanupPresence = initClientPresenceEngine();
-    const unsubPresence = subscribeToActiveClients((clients) => {
-      const online = clients.filter((c) => c.status === 'ONLINE').length;
-      setOnlineClientsCount(Math.max(1, online));
-    });
-
     return () => {
       cleanupPresence();
-      unsubPresence();
     };
   }, []);
 
-  // Recurring WorkManager DailyDatabaseBackupWorker (24h Periodic Check)
+  // Silent Recurring Daily Backup Check (24h Periodic Check, no startup toast logs)
   useEffect(() => {
     if (isInitialFetching) return;
 
-    // Run check immediately after initial Firestore snapshot hydration
-    const initialBackupRecord = checkAndRunDueDailyBackup(students, allPayments);
-    if (initialBackupRecord) {
-      const kbSize = (initialBackupRecord.sizeBytes / 1024).toFixed(1);
-      setToastMessage(
-        `WorkManager DailyDatabaseBackupWorker saved ${initialBackupRecord.fileName} (${kbSize} KB) to local device storage.`
-      );
-      setTimeout(() => setToastMessage(null), 4500);
-    }
+    checkAndRunDueDailyBackup(students, allPayments);
 
-    // Periodic background check for date rollover while app stays open
     const periodicWorkerInterval = setInterval(() => {
       checkAndRunDueDailyBackup(getStoredStudents(), getStoredPayments());
     }, 60 * 1000);
@@ -516,59 +558,38 @@ export default function App() {
       setAllPayments({ ...getStoredPayments() });
       setSeats([...getStoredSeats()]);
       setIsInitialFetching(false);
-      triggerToast('Database reset to clean state (0 example students, all 45 seats available).');
-    }, 600);
+      triggerToast('Database reset to 0 students.');
+    }, 450);
   };
 
-  const handleRestoreData = () => {
-    setIsInitialFetching(true);
-    const result = restorePreviousOrSampleData();
-    resetSeatsToDefaults();
-    setTimeout(() => {
-      setStudents([...getStoredStudents()]);
-      setAllPayments({ ...getStoredPayments() });
-      setSeats([...getStoredSeats()]);
-      setIsInitialFetching(false);
-      triggerToast(
-        `Restored ${result.count} previous student records & verified fee payment histories!`
-      );
-    }, 600);
-  };
-
-  // Main UI content (renderable inside mobile frame or desktop dashboard)
+  // Main UI content
   const renderAppContent = () => (
     <div
-      className={`flex flex-col h-full bg-slate-50 text-slate-800 relative overflow-hidden transition-colors duration-200 ${darkModeClass}`}
+      className={`flex flex-col h-full w-full bg-slate-50 text-slate-800 relative overflow-hidden transition-colors duration-200 ${darkModeClass}`}
     >
-      {/* 1. Ultra-Clean SaaS Top App Bar: Hamburger Drawer Icon, Title, Quick Global Search Bar & Notification Indicator */}
-      <header className="bg-white/90 backdrop-blur-md border-b border-slate-200/60 px-4 py-3 sm:px-6 shrink-0 z-10 transition-colors duration-200">
-        <div className="flex items-center justify-between gap-3">
+      {/* 1. Clean Top App Bar: Menu Icon, Brand Title, Global Search & Due Notification Indicator */}
+      <header className="bg-white/95 backdrop-blur-md border-b border-slate-200/60 px-4 py-3 sm:px-6 shrink-0 z-10 transition-colors duration-200">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
           {/* Left: Hamburger Menu Icon & Title */}
           <div className="flex items-center gap-2.5 shrink-0">
             <button
               type="button"
               onClick={() => setIsDrawerOpen(true)}
               aria-label="Open Navigation Drawer"
-              title="Open Navigation Drawer (Settings, Color Palette, Scan QR, History & Shifts, Reset & Restore)"
+              title="Open Menu"
               className="w-9 h-9 rounded-xl bg-slate-100/80 hover:bg-slate-200/70 active:scale-95 flex items-center justify-center shrink-0 border border-slate-200/60 text-slate-700 transition-all"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-xs border border-amber-500/30 hidden sm:flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-xs border border-amber-500/30 flex items-center justify-center shrink-0">
               <img src="/app-icon.png" alt="Lakshay Library" className="w-full h-full object-cover" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm sm:text-base font-bold tracking-tight text-slate-900 leading-tight">
-                  Lakshay Library
-                </h1>
-                <span className="hidden md:inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200/60">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                  LibTrack SaaS
-                </span>
-              </div>
+              <h1 className="text-sm sm:text-base font-bold tracking-tight text-slate-900 leading-tight">
+                Lakshay Library
+              </h1>
               <p className="text-[11px] text-slate-500">
-                {currentTheme.name.split('&')[0].trim()} &bull; {isDarkMode ? 'Dark' : 'Light'}
+                Study Hall Management
               </p>
             </div>
           </div>
@@ -595,7 +616,6 @@ export default function App() {
               )}
             </div>
 
-            {/* Search Bar Header Sorting Dropdown Menu ('Overdue Priority', 'Name (A-Z)', 'Next Due Date', 'Recent Payments') */}
             <div className="relative hidden sm:flex items-center shrink-0">
               <ArrowUpDown className="w-3 h-3 text-amber-600 absolute left-2.5 pointer-events-none" />
               <select
@@ -603,7 +623,7 @@ export default function App() {
                 value={sortOption}
                 onChange={(e) => setSortOption(e.target.value as StudentSortOption)}
                 className="pl-7 pr-2.5 py-1.5 rounded-full border border-slate-200/60 bg-slate-100/70 hover:bg-slate-100 text-[11px] font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500/40 cursor-pointer transition-all"
-                title="Sort student list by Overdue Priority, Name (A-Z), Next Due Date, or Recent Payments"
+                title="Sort student list"
               >
                 <option value="OVERDUE_PRIORITY">Overdue Priority (Default)</option>
                 <option value="NAME_ASC">Name (A-Z)</option>
@@ -616,39 +636,28 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right: Active Clients, Get APK, Google Drive Sync, Minimalist Desk Matrix Trigger & Notification Indicator */}
+          {/* Right: Notification Indicator */}
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* Active Clients Online & Crash Diagnostics Indicator */}
-            <button
-              type="button"
-              onClick={() => setIsDiagnosticsOpen(true)}
-              className="px-2.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-700 border border-emerald-500/30 transition-colors flex items-center gap-1.5 text-xs font-bold"
-              title="Active Clients & Crash Diagnostics (Lakshay_Library_Logs on Google Drive)"
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-              <Activity className="w-3.5 h-3.5 text-emerald-600 hidden sm:inline" />
-              <span>{onlineClientsCount} Active</span>
-            </button>
-
             <button
               type="button"
               onClick={() => setIsNotificationStatusOpen(true)}
               className="px-2.5 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 border border-amber-500/30 transition-colors flex items-center gap-1.5 text-xs font-bold"
-              title="Notification Alert Status: Due, Overdue & Backup Status"
+              title="Due & Overdue Alerts"
             >
-              <Bell className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
+              <Bell className="w-3.5 h-3.5 text-amber-600" />
               <span>{counts.overdue} Overdue &bull; {counts.dueSoon} Due</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Scrollable Workspace with Consistent 16px-24px Rhythm */}
+      {/* Main Scrollable Workspace */}
       <main
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5 pb-24"
+        className="flex-1 overflow-y-auto p-4 sm:p-6 pb-24"
       >
+        <div className="max-w-6xl mx-auto space-y-4 sm:space-y-5">
         {/* 2. Unified KPI Metrics Header Bar with Subtle Divider Lines (or Shimmer Skeleton while fetching) */}
         {isInitialFetching ? (
           <MetricsHeaderSkeleton />
@@ -843,7 +852,6 @@ export default function App() {
               setSelectedSeatForAdd('');
               setIsAddStudentOpen(true);
             }}
-            onRestorePreviousData={handleRestoreData}
           />
         ) : (
           <>
@@ -933,7 +941,7 @@ export default function App() {
               </div>
             )}
 
-            {/* Student List Header & Student Cards (or Shimmer Skeleton while Firestore is initially fetching) */}
+            {/* Student List Header & Student Cards */}
             {isInitialFetching ? (
               <StudentListSkeleton count={4} />
             ) : (
@@ -990,14 +998,14 @@ export default function App() {
                         ? 'No Overdue Students'
                         : activeTab === 'DUE_SOON'
                         ? 'No Fees Due in Next 3 Days'
-                        : 'No Students Match Your Filter'}
+                        : 'No Students Registered Yet'}
                     </h3>
                     <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
                       {activeTab === 'OVERDUE'
                         ? 'All Lakshay Library desks are up to date on fee payments.'
                         : activeTab === 'DUE_SOON'
                         ? 'No student due dates fall within the 3-day reminder window right now.'
-                        : 'Try adjusting your search query or register a new student.'}
+                        : 'Get started by registering your first student and assigning a library desk.'}
                     </p>
                     {activeTab === 'ALL' && (
                       <button
@@ -1040,12 +1048,13 @@ export default function App() {
             )}
           </>
         )}
+          </div>
         </div>
       </main>
 
       {/* Floating Bulk Action Bar (when students are selected) */}
       {isSelectionMode && selectedStudentIds.size > 0 && (
-        <div className="absolute bottom-20 inset-x-4 z-30 bg-slate-900/90 backdrop-blur-md text-white p-3 rounded-2xl shadow-xl border border-slate-700/70 flex items-center justify-between gap-2 animate-in slide-in-from-bottom-3">
+        <div className="fixed bottom-20 inset-x-4 max-w-2xl mx-auto z-30 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl shadow-xl border border-slate-700/70 flex items-center justify-between gap-2 animate-in slide-in-from-bottom-3">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
             <span className="text-xs font-bold font-mono whitespace-nowrap">
@@ -1083,7 +1092,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Left-Sliding ModalNavigationDrawer (Settings, Color Palette, Scan / QR Check-in, History & Shift Timings, Customize Seats) */}
+      {/* Left-Sliding Navigation Drawer */}
       <NavigationDrawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
@@ -1097,20 +1106,15 @@ export default function App() {
         }}
         onOpenShiftAndHistory={() => setIsShiftManagerOpen(true)}
         onOpenSeatMatrix={() => setIsSeatMatrixOpen(true)}
-        onViewKotlinDrawerCode={() => {
-          setSelectedCodeSnippetIndex(0);
-          setIsCodeViewerOpen(true);
-        }}
-        onOpenDiagnostics={() => setIsDiagnosticsOpen(true)}
         onResetDatabase={handleResetData}
-        onRestorePreviousData={handleRestoreData}
         onOpenUpiPaymentQr={() => setIsUpiPaymentQrOpen(true)}
         onOpenApkExport={() => setIsApkExportOpen(true)}
         onOpenWorkManager={() => setIsWorkManagerOpen(true)}
         onOpenGoogleDriveSync={() => setIsGoogleDriveSyncOpen(true)}
+        onRequestExitApp={() => setIsExitModalOpen(true)}
       />
 
-      {/* Frosted-Glass Pill Expandable '+ Actions' FAB Menu (Keeping ONLY Add Student & Toggle Theme) */}
+      {/* Frosted-Glass Pill Expandable '+ Actions' FAB Menu */}
       <ExpandableFabMenu
         theme={currentTheme}
         isDarkMode={isDarkMode}
@@ -1119,20 +1123,16 @@ export default function App() {
           setSelectedSeatForAdd('');
           setIsAddStudentOpen(true);
         }}
-        onViewKotlinFabCode={() => {
-          setSelectedCodeSnippetIndex(0);
-          setIsCodeViewerOpen(true);
-        }}
       />
 
       {/* In-app Notification Banner */}
       {toastMessage && (
-        <div className="absolute top-20 inset-x-3 z-50 p-3.5 bg-slate-900/95 text-white rounded-2xl shadow-xl border border-slate-700 flex items-start gap-3 animate-in slide-in-from-top-4 duration-200 backdrop-blur-md">
+        <div className="fixed top-20 inset-x-3 max-w-lg mx-auto z-50 p-3.5 bg-slate-900/95 text-white rounded-2xl shadow-xl border border-slate-700 flex items-start gap-3 animate-in slide-in-from-top-4 duration-200 backdrop-blur-md">
           <div className="w-8 h-8 rounded-xl bg-amber-400 text-slate-900 flex items-center justify-center shrink-0">
             <Bell className="w-4 h-4" />
           </div>
           <div className="flex-1 text-xs">
-            <h4 className="font-bold text-white">Lakshay Library Notification</h4>
+            <h4 className="font-bold text-white">Lakshay Library</h4>
             <p className="text-slate-200 mt-0.5">{toastMessage}</p>
           </div>
           <button
@@ -1148,364 +1148,196 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen h-dvh bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-white overflow-hidden">
-      {/* Top Desktop Control Bar (Shown on Desktop/Laptop viewports; hidden on native phone screens so the app runs full-screen) */}
-      <div className="hidden sm:flex bg-slate-900 border-b border-slate-800 px-4 py-2 items-center justify-between text-xs text-slate-300 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 font-bold text-white">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Lakshay Library Management App</span>
-          </div>
-          <span className="hidden md:inline text-slate-500">|</span>
-          <span className="hidden md:inline text-slate-400">
-            Warm Sunset Amber &bull; Recharts 6-Month Analytics &bull; Custom Shifts
-          </span>
-        </div>
-
-        {/* Device View Mode Toggle */}
-        <div className="flex items-center gap-2">
-          <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800">
-            <button
-              type="button"
-              onClick={() => setDeviceMode('mobile')}
-              className={`px-2.5 py-1 rounded-md flex items-center gap-1 text-xs transition-colors ${
-                deviceMode === 'mobile'
-                  ? 'bg-amber-600 text-white font-semibold'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Smartphone className="w-3.5 h-3.5" />
-              <span>Android Pixel</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setDeviceMode('desktop')}
-              className={`px-2.5 py-1 rounded-md flex items-center gap-1 text-xs transition-colors ${
-                deviceMode === 'desktop'
-                  ? 'bg-amber-600 text-white font-semibold'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Monitor className="w-3.5 h-3.5" />
-              <span>Full Screen</span>
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setIsDiagnosticsOpen(true)}
-            className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/40 text-xs font-bold flex items-center gap-1.5 transition-colors"
-            title="Active Clients & Crash Diagnostics (Lakshay_Library_Logs on Google Drive)"
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-            <Activity className="w-3.5 h-3.5" />
-            <span>{onlineClientsCount} Active</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsCodeViewerOpen(true)}
-            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1 border border-slate-700"
-          >
-            <Code2 className="w-3.5 h-3.5 text-amber-400" />
-            <span>View Kotlin Code</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Main Preview Container: Native Full-Screen on Mobile Phones (<640px), Simulator/Full-Screen on Laptop/Desktop */}
-      <div className="flex-1 flex items-center justify-center sm:p-6 overflow-hidden">
-        {/* On actual mobile phones (<640px), always render full-screen without fake bezel */}
-        <div className={`flex sm:hidden w-full h-full flex-col bg-slate-50 overflow-hidden ${darkModeClass}`}>
-          {renderAppContent()}
-        </div>
-
-        {/* On Laptop / Desktop (>=640px), honor deviceMode ('mobile' bezel vs 'desktop' full view) */}
-        <div className="hidden sm:flex w-full h-full items-center justify-center">
-          {deviceMode === 'mobile' ? (
-            /* Realistic Android Phone Device Shell for Laptop Preview */
-            <div className="relative w-full max-w-[440px] h-[870px] max-h-[90vh] bg-black rounded-[48px] p-3 shadow-2xl border-4 border-slate-800 ring-1 ring-white/10 flex flex-col overflow-hidden">
-              {/* Phone Speaker & Camera Notch */}
-              <div className="absolute top-4 inset-x-0 flex justify-center items-center z-30 pointer-events-none">
-                <div className="w-24 h-4 bg-black rounded-full flex items-center justify-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-slate-800 border border-slate-700" />
-                  <div className="w-8 h-1 bg-slate-900 rounded-full" />
-                </div>
-              </div>
-
-              {/* Inner Phone Screen */}
-              <div className={`flex-1 rounded-[38px] overflow-hidden flex flex-col bg-slate-50 relative pt-4 ${darkModeClass}`}>
-                {renderAppContent()}
-              </div>
-            </div>
-          ) : (
-            /* Full Desktop View */
-            <div className={`w-full max-w-5xl h-[870px] max-h-[90vh] bg-white rounded-3xl shadow-2xl border border-slate-800 overflow-hidden flex flex-col ${darkModeClass}`}>
-              {renderAppContent()}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* MODALS (Wrapped with active Light/Dark Mode theme scope for dynamic onSurface input visibility) */}
-      <div className={isDarkMode ? 'lakshay-dark-mode text-slate-100' : 'text-slate-900'}>
-      {/* 1. Add Student Composable Form & Kotlin Code */}
-      <AddStudentModal
-        isOpen={isAddStudentOpen}
-        onClose={() => setIsAddStudentOpen(false)}
-        suggestedSeat={selectedSeatForAdd}
-        theme={currentTheme}
-        shifts={shifts}
-        onOpenShiftManager={() => setIsShiftManagerOpen(true)}
-        onOpenSeatManager={() => {
-          setIsAddStudentOpen(false);
-          setIsSeatMatrixOpen(true);
-        }}
-        onStudentAdded={() => {
-          triggerToast('Student added successfully to Lakshay Library Firestore!');
-        }}
-      />
-
-      {/* 2. Central Shift Manager Modal */}
-      <ShiftManagerModal
-        shifts={shifts}
-        isOpen={isShiftManagerOpen}
-        onClose={() => setIsShiftManagerOpen(false)}
-        theme={currentTheme}
-      />
-
-      {/* 3. Detailed View for Student & PaymentHistory Subcollection */}
-      <StudentDetailModal
-        student={selectedStudentForDetail}
-        isOpen={!!selectedStudentForDetail}
-        onClose={() => setSelectedStudentForDetail(null)}
-        onMarkPaidClick={(s) => {
-          setSelectedStudentForDetail(null);
-          setStudentToMarkPaid(s);
-        }}
-        onWhatsAppClick={(s) => {
-          setStudentForWhatsApp(s);
-        }}
-        onQrCodeClick={(s) => {
-          setSelectedStudentForDetail(null);
-          setStudentForQrPass(s);
-        }}
-        onPrintCardClick={(s) => {
-          setSelectedStudentForDetail(null);
-          setStudentForPrintCard(s);
-        }}
-      />
-
-      {/* 4. Mark Paid Confirmation Modal */}
-      <PaymentConfirmModal
-        student={studentToMarkPaid}
-        isOpen={!!studentToMarkPaid}
-        onClose={() => setStudentToMarkPaid(null)}
-        onPaymentSuccess={() => {
-          triggerToast('Fee collected! Next due date extended by 1 month and logged to PaymentHistory subcollection.');
-        }}
-      />
-
-      {/* 5. WhatsApp Reminder Modal */}
-      <WhatsAppModal
-        student={studentForWhatsApp}
-        isOpen={!!studentForWhatsApp}
-        onClose={() => setStudentForWhatsApp(null)}
-      />
-
-      {/* 6. WorkManager Daily JSON Database Backup & 3-Day Automated Alert Simulator */}
-      <WorkManagerModal
-        students={students}
-        allPayments={allPayments}
-        isOpen={isWorkManagerOpen}
-        onClose={() => setIsWorkManagerOpen(false)}
-        onSendNotificationToast={(text) => triggerToast(text)}
-      />
-
-      {/* 7. Desk & Seat Matrix Map */}
-      <SeatMatrixModal
-        students={students}
-        isOpen={isSeatMatrixOpen}
-        onClose={() => setIsSeatMatrixOpen(false)}
-        onSelectStudent={(s) => setSelectedStudentForDetail(s)}
-        onAddStudentToSeat={(seat) => {
-          setSelectedSeatForAdd(seat);
-          setIsAddStudentOpen(true);
-        }}
-      />
-
-      {/* 8. Unique Student QR Code Desk Pass Modal */}
-      <StudentQrModal
-        student={studentForQrPass}
-        isOpen={!!studentForQrPass}
-        onClose={() => setStudentForQrPass(null)}
-        theme={currentTheme}
-        onOpenScannerWithStudent={(s) => {
-          setStudentForQrPass(null);
-          setStudentToPreScan(s);
-          setIsCheckInScannerOpen(true);
-        }}
-      />
-
-      {/* 9. Front-Desk Quick Digital Check-in Scanner View */}
-      <CheckInScannerModal
-        students={students}
-        isOpen={isCheckInScannerOpen}
-        onClose={() => {
-          setIsCheckInScannerOpen(false);
-          setStudentToPreScan(null);
-        }}
-        theme={currentTheme}
-        preSelectedStudent={studentToPreScan}
-        onCheckInSuccess={(s) => {
-          triggerToast(`✓ Check-in recorded in Firestore for ${s.name} (Seat ${s.seatNumber})!`);
-        }}
-      />
-
-      {/* 10. Bulk WhatsApp Reminders Queue Modal */}
-      <BulkWhatsAppModal
-        students={selectedStudentsList}
-        isOpen={isBulkWhatsAppOpen}
-        onClose={() => setIsBulkWhatsAppOpen(false)}
-        theme={currentTheme}
-      />
-
-      {/* 11. Printable Library Badge & QR Card View */}
-      <PrintableLibraryCardModal
-        student={studentForPrintCard}
-        isOpen={!!studentForPrintCard}
-        onClose={() => setStudentForPrintCard(null)}
-        theme={currentTheme}
-      />
-
-      {/* 12. Settings Menu Modal with Global Dark Mode Toggle */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        theme={currentTheme}
-        isDarkMode={isDarkMode}
-        onToggleDarkMode={handleToggleDarkMode}
-        onSelectTheme={handleThemeChange}
-        onOpenShiftManager={() => setIsShiftManagerOpen(true)}
-        onOpenSeatMatrix={() => setIsSeatMatrixOpen(true)}
-        onOpenWorkManager={() => setIsWorkManagerOpen(true)}
-        onResetDatabase={handleResetData}
-        onOpenDiagnostics={() => setIsDiagnosticsOpen(true)}
-      />
-
-      {/* 13. Android WebAPK Installer & Native APK Project Bundle Exporter */}
-      <ApkExportModal
-        isOpen={isApkExportOpen}
-        onClose={() => setIsApkExportOpen(false)}
-        onTriggerToast={triggerToast}
-      />
-
-      {/* 14. Google Drive Daily Sync & Primary/Secondary Device Role Modal */}
-      <GoogleDriveSyncModal
-        isOpen={isGoogleDriveSyncOpen}
-        onClose={() => setIsGoogleDriveSyncOpen(false)}
-        students={students}
-        onTriggerToast={triggerToast}
-      />
-
-      {/* 15. Real-time Active Clients, Diagnostics & Google Drive Crash Logs Modal */}
-      <DiagnosticsLogsModal
-        isOpen={isDiagnosticsOpen}
-        onClose={() => setIsDiagnosticsOpen(false)}
-        onTriggerToast={triggerToast}
-        onOpenDriveSyncModal={() => setIsGoogleDriveSyncOpen(true)}
-      />
-
-      {/* 16. Reception UPI ID & Payment QR Standee Modal (with warning on modification) */}
-      <UpiPaymentQrModal
-        isOpen={isUpiPaymentQrOpen}
-        onClose={() => setIsUpiPaymentQrOpen(false)}
-        onTriggerToast={triggerToast}
-      />
-
-      {/* 17. Notification Alert Status Modal (showing overdue, due soon & backup status) */}
-      <NotificationStatusModal
-        isOpen={isNotificationStatusOpen}
-        onClose={() => setIsNotificationStatusOpen(false)}
-        students={students}
-        onOpenWorkManager={() => setIsWorkManagerOpen(true)}
-        onOpenGoogleDriveSync={() => setIsGoogleDriveSyncOpen(true)}
-      />
-
-      {/* 8. Full Kotlin Jetpack Compose Codebase Inspector */}
-      {isCodeViewerOpen && (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/80 backdrop-blur-md animate-in fade-in ${darkModeClass}`}>
-          <div 
-            className="bg-slate-900 rounded-3xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col border border-slate-800 overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
-              <div className="flex items-center gap-2">
-                <Code2 className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-bold text-white">
-                  Lakshay Library &bull; Android Jetpack Compose Codebase
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCodeViewerOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-slate-800 transition-colors"
-              >
-                &times;
-              </button>
-            </div>
-
-            {/* File Tabs */}
-            <div className="flex items-center gap-1 px-4 py-2 bg-slate-950 border-b border-slate-800 overflow-x-auto text-xs no-scrollbar">
-              {KOTLIN_CODE_SNIPPETS.map((file, idx) => (
-                <button
-                  key={file.name}
-                  type="button"
-                  onClick={() => setSelectedCodeSnippetIndex(idx)}
-                  className={`px-3 py-1.5 rounded-xl whitespace-nowrap font-mono text-xs transition-all ${
-                    selectedCodeSnippetIndex === idx
-                      ? 'bg-amber-600 text-white font-semibold'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                  }`}
-                >
-                  {file.name}
-                </button>
-              ))}
-            </div>
-
-            {/* File Description */}
-            <div className="p-3 bg-slate-800/60 border-b border-slate-800 text-xs text-slate-300 flex items-center justify-between">
-              <div>
-                <span className="font-mono text-amber-400">
-                  {KOTLIN_CODE_SNIPPETS[selectedCodeSnippetIndex].path}
-                </span>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  {KOTLIN_CODE_SNIPPETS[selectedCodeSnippetIndex].description}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(KOTLIN_CODE_SNIPPETS[selectedCodeSnippetIndex].code);
-                  triggerToast(`Copied ${KOTLIN_CODE_SNIPPETS[selectedCodeSnippetIndex].name} to clipboard!`);
-                }}
-                className="px-3 py-1.5 rounded-lg bg-amber-600/90 hover:bg-amber-600 text-white text-xs font-semibold shrink-0"
-              >
-                Copy File
-              </button>
-            </div>
-
-            {/* Syntax-Highlighted Kotlin Jetpack Compose Code Output */}
-            <KotlinCodeHighlighter
-              code={KOTLIN_CODE_SNIPPETS[selectedCodeSnippetIndex].code}
-              showToolbar={true}
-              maxHeightClass="flex-1"
-            />
-          </div>
-        </div>
+    <div className={`min-h-screen h-dvh w-full flex flex-col font-sans selection:bg-amber-500 selection:text-white overflow-hidden bg-slate-50 ${darkModeClass}`}>
+      {/* App Launch Animation Splash Screen */}
+      {isLaunching && (
+        <AppLaunchSplash onComplete={() => setIsLaunching(false)} />
       )}
+
+      {/* Full-Screen Production App Content */}
+      {renderAppContent()}
+
+      {/* Exit App Confirmation & Farewell Animation Modal */}
+      <ExitAppModal
+        isOpen={isExitModalOpen}
+        onCancel={() => setIsExitModalOpen(false)}
+      />
+
+      {/* MODALS (Wrapped with active Light/Dark Mode theme scope) */}
+      <div className={isDarkMode ? 'lakshay-dark-mode text-slate-100' : 'text-slate-900'}>
+        {/* 1. Add Student Modal */}
+        <AddStudentModal
+          isOpen={isAddStudentOpen}
+          onClose={() => setIsAddStudentOpen(false)}
+          suggestedSeat={selectedSeatForAdd}
+          theme={currentTheme}
+          shifts={shifts}
+          onOpenShiftManager={() => setIsShiftManagerOpen(true)}
+          onOpenSeatManager={() => {
+            setIsAddStudentOpen(false);
+            setIsSeatMatrixOpen(true);
+          }}
+          onStudentAdded={() => {
+            triggerToast('Student registered successfully in Lakshay Library.');
+          }}
+        />
+
+        {/* 2. Central Shift Manager Modal */}
+        <ShiftManagerModal
+          shifts={shifts}
+          isOpen={isShiftManagerOpen}
+          onClose={() => setIsShiftManagerOpen(false)}
+          theme={currentTheme}
+        />
+
+        {/* 3. Detailed View for Student & Payment History */}
+        <StudentDetailModal
+          student={selectedStudentForDetail}
+          isOpen={!!selectedStudentForDetail}
+          onClose={() => setSelectedStudentForDetail(null)}
+          onMarkPaidClick={(s) => {
+            setSelectedStudentForDetail(null);
+            setStudentToMarkPaid(s);
+          }}
+          onWhatsAppClick={(s) => {
+            setStudentForWhatsApp(s);
+          }}
+          onQrCodeClick={(s) => {
+            setSelectedStudentForDetail(null);
+            setStudentForQrPass(s);
+          }}
+          onPrintCardClick={(s) => {
+            setSelectedStudentForDetail(null);
+            setStudentForPrintCard(s);
+          }}
+        />
+
+        {/* 4. Mark Paid Confirmation Modal */}
+        <PaymentConfirmModal
+          student={studentToMarkPaid}
+          isOpen={!!studentToMarkPaid}
+          onClose={() => setStudentToMarkPaid(null)}
+          onPaymentSuccess={() => {
+            triggerToast('Fee collected! Next due date extended by 1 month.');
+          }}
+        />
+
+        {/* 5. WhatsApp Reminder Modal */}
+        <WhatsAppModal
+          student={studentForWhatsApp}
+          isOpen={!!studentForWhatsApp}
+          onClose={() => setStudentForWhatsApp(null)}
+        />
+
+        {/* 6. Daily Backup & 3-Day Automated Fee Alert Settings */}
+        <WorkManagerModal
+          students={students}
+          allPayments={allPayments}
+          isOpen={isWorkManagerOpen}
+          onClose={() => setIsWorkManagerOpen(false)}
+          onSendNotificationToast={(text) => triggerToast(text)}
+        />
+
+        {/* 7. Desk & Seat Matrix Map */}
+        <SeatMatrixModal
+          students={students}
+          isOpen={isSeatMatrixOpen}
+          onClose={() => setIsSeatMatrixOpen(false)}
+          onSelectStudent={(s) => setSelectedStudentForDetail(s)}
+          onAddStudentToSeat={(seat) => {
+            setSelectedSeatForAdd(seat);
+            setIsAddStudentOpen(true);
+          }}
+        />
+
+        {/* 8. Unique Student QR Code Desk Pass Modal */}
+        <StudentQrModal
+          student={studentForQrPass}
+          isOpen={!!studentForQrPass}
+          onClose={() => setStudentForQrPass(null)}
+          theme={currentTheme}
+          onOpenScannerWithStudent={(s) => {
+            setStudentForQrPass(null);
+            setStudentToPreScan(s);
+            setIsCheckInScannerOpen(true);
+          }}
+        />
+
+        {/* 9. Front-Desk Quick Digital Check-in Scanner View */}
+        <CheckInScannerModal
+          students={students}
+          isOpen={isCheckInScannerOpen}
+          onClose={() => {
+            setIsCheckInScannerOpen(false);
+            setStudentToPreScan(null);
+          }}
+          theme={currentTheme}
+          preSelectedStudent={studentToPreScan}
+          onCheckInSuccess={(s) => {
+            triggerToast(`✓ Check-in recorded for ${s.name} (Seat ${s.seatNumber})!`);
+          }}
+        />
+
+        {/* 10. Bulk WhatsApp Reminders Queue Modal */}
+        <BulkWhatsAppModal
+          students={selectedStudentsList}
+          isOpen={isBulkWhatsAppOpen}
+          onClose={() => setIsBulkWhatsAppOpen(false)}
+          theme={currentTheme}
+        />
+
+        {/* 11. Printable Library Badge & QR Card View */}
+        <PrintableLibraryCardModal
+          student={studentForPrintCard}
+          isOpen={!!studentForPrintCard}
+          onClose={() => setStudentForPrintCard(null)}
+          theme={currentTheme}
+        />
+
+        {/* 12. Settings Menu Modal with Global Dark Mode Toggle */}
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          theme={currentTheme}
+          isDarkMode={isDarkMode}
+          onToggleDarkMode={handleToggleDarkMode}
+          onSelectTheme={handleThemeChange}
+          onOpenShiftManager={() => setIsShiftManagerOpen(true)}
+          onOpenSeatMatrix={() => setIsSeatMatrixOpen(true)}
+          onOpenWorkManager={() => setIsWorkManagerOpen(true)}
+          onResetDatabase={handleResetData}
+        />
+
+        {/* 13. Android WebAPK Installer & Native APK Exporter */}
+        <ApkExportModal
+          isOpen={isApkExportOpen}
+          onClose={() => setIsApkExportOpen(false)}
+          onTriggerToast={triggerToast}
+        />
+
+        {/* 14. Google Drive Daily Sync & Primary/Secondary Device Role Modal */}
+        <GoogleDriveSyncModal
+          isOpen={isGoogleDriveSyncOpen}
+          onClose={() => setIsGoogleDriveSyncOpen(false)}
+          students={students}
+          onTriggerToast={triggerToast}
+        />
+
+        {/* 15. Reception UPI ID & Payment QR Standee Modal */}
+        <UpiPaymentQrModal
+          isOpen={isUpiPaymentQrOpen}
+          onClose={() => setIsUpiPaymentQrOpen(false)}
+          onTriggerToast={triggerToast}
+        />
+
+        {/* 16. Notification Alert Status Modal */}
+        <NotificationStatusModal
+          isOpen={isNotificationStatusOpen}
+          onClose={() => setIsNotificationStatusOpen(false)}
+          students={students}
+          onOpenWorkManager={() => setIsWorkManagerOpen(true)}
+          onOpenGoogleDriveSync={() => setIsGoogleDriveSyncOpen(true)}
+        />
       </div>
     </div>
   );
@@ -1628,7 +1460,7 @@ const NotificationStatusModal: React.FC<NotificationStatusModalProps> = ({
             className="flex-1 py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
           >
             <Bell className="w-4 h-4" />
-            <span>Configure WorkManager Tasks</span>
+            <span>Auto Backups &amp; Alerts</span>
           </button>
           <button
             type="button"
@@ -1646,4 +1478,5 @@ const NotificationStatusModal: React.FC<NotificationStatusModalProps> = ({
     </div>
   );
 };
+
 

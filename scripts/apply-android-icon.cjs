@@ -69,3 +69,23 @@ if (fs.existsSync(bgXmlPath)) {
   fs.writeFileSync(bgXmlPath, xmlContent);
   console.log('Updated ic_launcher_background.xml to deep teal (#0B192C)');
 }
+
+// 4. Sync versionName and versionCode in android/app/build.gradle from package.json
+const buildGradlePath = path.join(__dirname, '../android/app/build.gradle');
+const pkgJsonPath = path.join(__dirname, '../package.json');
+if (fs.existsSync(buildGradlePath) && fs.existsSync(pkgJsonPath)) {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+    const versionName = pkg.version || '2.0.0';
+    const parts = versionName.split('.').map((n) => parseInt(n, 10) || 0);
+    const versionCode = (parts[0] || 2) * 10000 + (parts[1] || 0) * 100 + (parts[2] || 0);
+    let gradleContent = fs.readFileSync(buildGradlePath, 'utf8');
+    gradleContent = gradleContent.replace(/versionCode\s+\d+/, `versionCode ${versionCode}`);
+    gradleContent = gradleContent.replace(/versionName\s+"[^"]+"/, `versionName "${versionName}"`);
+    fs.writeFileSync(buildGradlePath, gradleContent);
+    console.log(`Updated android/app/build.gradle to versionName "${versionName}" (versionCode ${versionCode})`);
+  } catch (err) {
+    console.warn('Could not update build.gradle version:', err.message);
+  }
+}
+

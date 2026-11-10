@@ -274,21 +274,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <button
               type="button"
               onClick={onOpenAddStudent}
-              className="px-4 py-2.5 rounded-full bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
+              className="px-5 py-2.5 rounded-full bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
             >
               <Plus className="w-4 h-4" />
               <span>Register First Student</span>
-            </button>
-          )}
-          {onRestorePreviousData && (
-            <button
-              type="button"
-              onClick={onRestorePreviousData}
-              className="px-4 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200/80 text-slate-700 text-xs font-bold border border-slate-200 transition-all flex items-center gap-1.5"
-              title="Restore previous sample records (8 students & payments)"
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-              <span>Restore Previous / Sample Data</span>
             </button>
           )}
         </div>

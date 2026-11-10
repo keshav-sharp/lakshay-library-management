@@ -233,55 +233,21 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
         {/* Modal Header */}
         <div className={`px-6 py-4 border-b border-slate-100 flex items-center justify-between ${theme.headerBg} text-white`}>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold uppercase tracking-wider bg-white/20 text-white">
-                Jetpack Compose Composable
-              </span>
-              <h2 className="text-lg font-bold text-white">
-                Add New Student
-              </h2>
-            </div>
+            <h2 className="text-lg font-bold text-white">
+              Add New Student
+            </h2>
             <p className="text-xs text-white/80 mt-0.5">
-              Registers student record into Cloud Firestore with custom shift &amp; fee assignment
+              Assign desk, shift timing &amp; monthly fee
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* View switcher: Form vs Jetpack Compose Kotlin Code */}
-            <div className="flex bg-black/20 p-0.5 rounded-lg text-xs font-medium border border-white/20">
-              <button
-                type="button"
-                onClick={() => setActiveTab('form')}
-                className={`px-3 py-1 rounded-md transition-all ${
-                  activeTab === 'form' 
-                    ? 'bg-white text-slate-900 shadow-xs font-semibold' 
-                    : 'text-white/80 hover:text-white'
-                }`}
-              >
-                Form UI
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('kotlin_code')}
-                className={`px-3 py-1 rounded-md transition-all flex items-center gap-1 ${
-                  activeTab === 'kotlin_code' 
-                    ? 'bg-white text-slate-900 shadow-xs font-semibold' 
-                    : 'text-white/80 hover:text-white'
-                }`}
-              >
-                <Code2 className="w-3.5 h-3.5" />
-                <span>Kotlin Code</span>
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 text-white/70 hover:text-white rounded-full hover:bg-white/10 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 text-white/70 hover:text-white rounded-full hover:bg-white/10 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Modal Body */}
@@ -598,14 +564,6 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
               />
             </div>
 
-            {/* Subcollection Ready Notice */}
-            <div className="p-3 bg-amber-50/70 rounded-xl border border-amber-200 flex items-start gap-2.5 text-xs text-amber-950">
-              <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-semibold">Sub-collection Ready:</span> A dedicated <code className="bg-amber-200/60 px-1 py-0.5 rounded text-[11px] font-mono">PaymentHistory</code> sub-collection will automatically attach to this student to log all future payments upon clicking &quot;Mark Paid&quot;.
-              </div>
-            </div>
-
             {/* Actions */}
             <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100">
               <button
@@ -624,12 +582,12 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
                 {isSubmitting ? (
                   <>
                     <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Saving to Firestore...</span>
+                    <span>Saving Student...</span>
                   </>
                 ) : (
                   <>
                     <Save className="w-4 h-4" />
-                    <span>Save to Firestore</span>
+                    <span>Save Student</span>
                   </>
                 )}
               </button>

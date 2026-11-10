@@ -1,5 +1,5 @@
 {
-  "appId": "com.example.lakshaylibrary",
+  "appId": "com.lakshaylibrary.app",
   "appName": "Lakshay Library",
   "webDir": "dist",
   "server": {

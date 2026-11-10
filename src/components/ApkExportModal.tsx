@@ -24,7 +24,7 @@ interface ApkExportModalProps {
 
 const STANDARD_ANDROID_MANIFEST_XML = `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.librarymanagement">
+    package="com.lakshaylibrary.app">
 
     <!-- Standard Android permissions managed by Global Android OS & Google Play Protect -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -57,15 +57,15 @@ const APP_BUILD_GRADLE_KTS = `plugins {
 }
 
 android {
-    namespace = "com.example.librarymanagement"
+    namespace = "com.lakshaylibrary.app"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.librarymanagement"
+        applicationId = "com.lakshaylibrary.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 20000
+        versionName = "2.0.0"
     }
 
     buildFeatures {

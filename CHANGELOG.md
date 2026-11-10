@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v2.0.0] - 2026-11-10 (Google Play Store Production Release)
+
+### Direct APK Download
+- 📦 **[Download `LakshayLibrary-v2.0.0.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 🔗 **[View Release Notes on GitHub (`v2.0.0`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v2.0.0)**
+
+### Added
+- **App Launch Splash Animation**: Added a smooth, branded launch animation (`AppLaunchSplash`) featuring the Lakshay Library icon, golden-teal ambient glow, and loading progress bar on startup.
+- **Exit App Confirmation & Exit Animation**: Added an interactive Exit Confirmation dialog (`ExitAppModal`) triggered by the Android/browser Back button at the home screen or via the `"Exit App"` action in the Navigation Drawer, followed by a smooth farewell exit animation.
+
+### Changed
+- **Google Play Store Production Compliance (`com.lakshaylibrary.app`)**:
+  - Updated Android application ID from `com.example.lakshaylibrary` to `com.lakshaylibrary.app`.
+  - Reset default student, payment, and attendance databases to `0` records on fresh production initialization (`lakshay_library_prod_v2_0_0_clean`), removing sample/demo student seeds and the "Restore Previous Data" button.
+  - Removed all pre-shown diagnostic logs, `"1 Active"` client badges, developer simulator toolbars, and Kotlin source code tabs so the app runs full-screen like a standard consumer Google Play application.
+
+---
+
 ## [v1.3.3] - 2026-11-09
 
 ### Direct APK Download

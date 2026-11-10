@@ -221,42 +221,13 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Tab switcher: Details vs Jetpack Compose code */}
-            <div className="flex bg-slate-200/70 p-0.5 rounded-lg text-xs font-medium">
-              <button
-                type="button"
-                onClick={() => setActiveTab('details')}
-                className={`px-3 py-1 rounded-md transition-all ${
-                  activeTab === 'details' 
-                    ? 'bg-white text-amber-700 shadow-xs font-semibold' 
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Profile &amp; Logs
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('kotlin_code')}
-                className={`px-3 py-1 rounded-md transition-all flex items-center gap-1 ${
-                  activeTab === 'kotlin_code' 
-                    ? 'bg-white text-amber-700 shadow-xs font-semibold' 
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Code2 className="w-3.5 h-3.5" />
-                <span>Kotlin Screen</span>
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {activeTab === 'details' ? (
@@ -380,12 +351,9 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                     <h3 className="text-sm font-bold text-slate-900">
                       Daily Attendance &bull; {calendarInfo.monthName}
                     </h3>
-                    <code className="text-[11px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                      DailyAttendance
-                    </code>
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Monthly check-in history from Firestore <code className="font-mono text-[11px]">DailyAttendance</code> collection
+                    Monthly check-in history and attendance calendar
                   </p>
                 </div>
 
@@ -589,21 +557,17 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
               )}
             </div>
 
-            {/* Sub-collection 'PaymentHistory' Section */}
             <div>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <Receipt className="w-4 h-4 text-amber-600" />
                   <h3 className="text-sm font-bold text-slate-900">
-                    Payment History Sub-collection
+                    Payment History
                   </h3>
-                  <code className="text-[11px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                    students/{student.id}/PaymentHistory
-                  </code>
                 </div>
 
                 <span className="text-xs text-slate-500 font-medium">
-                  {paymentHistory.length} logs
+                  {paymentHistory.length} payments
                 </span>
               </div>
 

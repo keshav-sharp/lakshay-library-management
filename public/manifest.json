@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Lakshay Library Management App",
-  "short_name": "LakshayLib",
-  "description": "Android Jetpack Compose & Cloud Firestore library management app for student fee tracking, WhatsApp reminders, payment history sub-collections, and WorkManager alerts.",
+  "name": "Lakshay Library",
+  "short_name": "Lakshay Library",
+  "description": "Library and study hall management app for student seat allocation, shift billing, attendance tracking, WhatsApp fee reminders, and Google Drive cloud sync.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

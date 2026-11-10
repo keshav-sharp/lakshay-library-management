@@ -16,6 +16,26 @@ const STUDENTS_STORAGE_KEY = 'libtrack_firestore_students';
 const PAYMENTS_STORAGE_KEY = 'libtrack_firestore_payments';
 const DAILY_ATTENDANCE_STORAGE_KEY = 'libtrack_firestore_daily_attendance';
 const PREVIOUS_SNAPSHOT_STORAGE_KEY = 'libtrack_firestore_previous_backup_snapshot';
+const PRODUCTION_CLEAN_INIT_KEY = 'lakshay_library_prod_v2_0_0_clean';
+
+const ensureProductionCleanInit = () => {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    if (localStorage.getItem(PRODUCTION_CLEAN_INIT_KEY) !== '1') {
+      localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify([]));
+      localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify({}));
+      localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify([]));
+      localStorage.removeItem(PREVIOUS_SNAPSHOT_STORAGE_KEY);
+      localStorage.removeItem('lakshay_library_crash_logs_v1');
+      localStorage.removeItem('lakshay_library_daily_backups_v1');
+      localStorage.setItem(PRODUCTION_CLEAN_INIT_KEY, '1');
+    }
+  } catch {
+    // Ignore storage access errors
+  }
+};
+
+ensureProductionCleanInit();
 
 type Listener = () => void;
 const listeners: Set<Listener> = new Set();
@@ -38,6 +58,7 @@ export const subscribeToFirestore = (callback: Listener): (() => void) => {
 };
 
 export const getStoredStudents = (): Student[] => {
+  ensureProductionCleanInit();
   try {
     const raw = localStorage.getItem(STUDENTS_STORAGE_KEY);
     if (!raw) {
@@ -369,58 +390,22 @@ export const hasPreviousSnapshot = (): boolean => {
 };
 
 export const resetFirestoreToDefaults = () => {
-  // Save current data as previous snapshot before resetting if students exist
   try {
-    const currentStudents = getStoredStudents();
-    const currentPayments = getStoredPayments();
-    const currentAttendance = getStoredDailyAttendance();
-    if (currentStudents.length > 0) {
-      localStorage.setItem(
-        PREVIOUS_SNAPSHOT_STORAGE_KEY,
-        JSON.stringify({
-          students: currentStudents,
-          payments: currentPayments,
-          dailyAttendance: currentAttendance,
-          savedAt: new Date().toISOString(),
-        })
-      );
-    }
+    localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(INITIAL_STUDENTS));
+    localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(INITIAL_PAYMENT_HISTORY));
+    localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(INITIAL_DAILY_ATTENDANCE));
+    localStorage.removeItem(PREVIOUS_SNAPSHOT_STORAGE_KEY);
+    localStorage.removeItem('lakshay_library_crash_logs_v1');
+    localStorage.removeItem('lakshay_library_daily_backups_v1');
   } catch {
-    // Ignore
+    // Ignore storage errors
   }
-
-  localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(INITIAL_STUDENTS));
-  localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(INITIAL_PAYMENT_HISTORY));
-  localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(INITIAL_DAILY_ATTENDANCE));
   notifyListeners();
 };
 
 export const restorePreviousOrSampleData = (): { count: number; source: 'backup' | 'sample' } => {
-  // Check if a previous user snapshot exists
-  try {
-    const raw = localStorage.getItem(PREVIOUS_SNAPSHOT_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.students) && parsed.students.length > 0) {
-        localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(parsed.students));
-        localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(parsed.payments || {}));
-        if (Array.isArray(parsed.dailyAttendance)) {
-          localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(parsed.dailyAttendance));
-        }
-        notifyListeners();
-        return { count: parsed.students.length, source: 'backup' };
-      }
-    }
-  } catch {
-    // Fall back to sample data
-  }
-
-  // Restore sample dataset
-  localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(SAMPLE_STUDENTS_DATA));
-  localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(SAMPLE_PAYMENT_HISTORY_DATA));
-  localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(INITIAL_DAILY_ATTENDANCE));
-  notifyListeners();
-  return { count: SAMPLE_STUDENTS_DATA.length, source: 'sample' };
+  resetFirestoreToDefaults();
+  return { count: 0, source: 'sample' };
 };
 
 export const importSyncedFirestoreSnapshot = (

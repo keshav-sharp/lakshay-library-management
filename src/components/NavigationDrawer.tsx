@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ThemeColors, ThemePalette, THEME_PALETTES } from '../types/theme';
 import { useTheme } from '../context/ThemeContext';
+import {
+  getActiveOnlineClientsCount,
+  subscribeToActiveClients,
+} from '../services/clientPresenceService';
 import {
   Settings,
   Palette,
@@ -10,18 +14,16 @@ import {
   X,
   ChevronRight,
   Check,
-  Code2,
-  Activity,
-  RotateCcw,
   Trash2,
   QrCode,
   Bell,
   Cloud,
   ExternalLink,
   GitBranch,
+  LogOut,
 } from 'lucide-react';
 
-export const APP_VERSION = 'v1.3.3';
+export const APP_VERSION = 'v2.0.0';
 export const GITHUB_REPO_URL = 'https://github.com/keshav-sharp/lakshay-library-management';
 
 export interface DrawerMenuItem {
@@ -42,14 +44,12 @@ interface NavigationDrawerProps {
   onOpenScanner: () => void;
   onOpenShiftAndHistory: () => void;
   onOpenSeatMatrix: () => void;
-  onViewKotlinDrawerCode: () => void;
-  onOpenDiagnostics?: () => void;
   onResetDatabase?: () => void;
-  onRestorePreviousData?: () => void;
   onOpenUpiPaymentQr?: () => void;
   onOpenApkExport?: () => void;
   onOpenWorkManager?: () => void;
   onOpenGoogleDriveSync?: () => void;
+  onRequestExitApp?: () => void;
 }
 
 export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
@@ -62,16 +62,26 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
   onOpenScanner,
   onOpenShiftAndHistory,
   onOpenSeatMatrix,
-  onViewKotlinDrawerCode,
-  onOpenDiagnostics,
   onResetDatabase,
-  onRestorePreviousData,
   onOpenUpiPaymentQr,
   onOpenWorkManager,
   onOpenGoogleDriveSync,
+  onRequestExitApp,
 }) => {
   const { darkModeClass } = useTheme();
   const [isPaletteExpanded, setIsPaletteExpanded] = useState(false);
+  const [activeClientsCount, setActiveClientsCount] = useState<number>(() =>
+    getActiveOnlineClientsCount()
+  );
+
+  useEffect(() => {
+    setActiveClientsCount(getActiveOnlineClientsCount());
+    const unsub = subscribeToActiveClients((clients) => {
+      const onlineCount = clients.filter((c) => c.status === 'ONLINE').length;
+      setActiveClientsCount(Math.max(1, onlineCount));
+    });
+    return () => unsub();
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -84,7 +94,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
     {
       id: 'settings',
       label: 'Settings',
-      subtitle: 'App preferences & library configuration',
+      subtitle: 'Appearance & library configuration',
       icon: Settings,
       onClick: () => {
         handleCloseDrawer();
@@ -112,8 +122,8 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
     },
     {
       id: 'history_shifts',
-      label: 'History & Shift Timings',
-      subtitle: 'Configure shifts, fees & check-in logs',
+      label: 'Shift Timings & Pricing',
+      subtitle: 'Configure study shifts & monthly fees',
       icon: Clock,
       onClick: () => {
         handleCloseDrawer();
@@ -123,7 +133,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
     {
       id: 'customize_seats',
       label: 'Customize Seats',
-      subtitle: 'Add or remove library desks & rows',
+      subtitle: 'Manage library desks & seating layout',
       icon: Armchair,
       onClick: () => {
         handleCloseDrawer();
@@ -131,19 +141,9 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
       },
     },
     {
-      id: 'diagnostics_logs',
-      label: 'Diagnostics & Active Clients',
-      subtitle: 'Lakshay_Library_Master/Automated_Logs on Drive',
-      icon: Activity,
-      onClick: () => {
-        handleCloseDrawer();
-        if (onOpenDiagnostics) onOpenDiagnostics();
-      },
-    },
-    {
       id: 'library_upi_qr',
       label: 'Library UPI & Payment QR',
-      subtitle: 'Attach reception UPI ID & QR Code standee',
+      subtitle: 'Reception UPI ID & QR code standee',
       icon: QrCode,
       onClick: () => {
         handleCloseDrawer();
@@ -152,8 +152,8 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
     },
     {
       id: 'work_manager',
-      label: 'Android WorkManager Tasks',
-      subtitle: 'Daily JSON backup & twice-daily alerts',
+      label: 'Backups & Fee Reminders',
+      subtitle: 'Daily local backup & due-date alerts',
       icon: Bell,
       onClick: () => {
         handleCloseDrawer();
@@ -162,8 +162,10 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
     },
     {
       id: 'gdrive_sync',
-      label: 'Google Drive Daily Sync & Role',
-      subtitle: 'Lakshay_Library_Master/Master_Sync_Backups',
+      label: 'Google Drive Daily Sync & Primary Role',
+      subtitle: `${activeClientsCount} Active ${
+        activeClientsCount === 1 ? 'Client' : 'Clients'
+      } • Heartbeat & Crash Logs`,
       icon: Cloud,
       onClick: () => {
         handleCloseDrawer();
@@ -172,8 +174,8 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
     },
     {
       id: 'reset_database',
-      label: 'Reset Database (Start Fresh)',
-      subtitle: 'Clear all student records to 0 & empty analytics',
+      label: 'Reset All Data',
+      subtitle: 'Clear all student records to 0',
       icon: Trash2,
       onClick: () => {
         handleCloseDrawer();
@@ -181,19 +183,19 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
       },
     },
     {
-      id: 'restore_data',
-      label: 'Restore Previous Data',
-      subtitle: 'Reload previous / sample records (8 students & shifts)',
-      icon: RotateCcw,
+      id: 'exit_app',
+      label: 'Exit App',
+      subtitle: 'Safely close Lakshay Library',
+      icon: LogOut,
       onClick: () => {
         handleCloseDrawer();
-        if (onRestorePreviousData) onRestorePreviousData();
+        if (onRequestExitApp) onRequestExitApp();
       },
     },
   ];
 
   return (
-    <div className="absolute inset-0 z-40 overflow-hidden">
+    <div className="fixed inset-0 z-40 overflow-hidden">
       {/* Scrim Backdrop */}
       <div
         onClick={handleCloseDrawer}
@@ -217,7 +219,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                   Lakshay Library
                 </h2>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  Navigation Drawer &bull; {isDarkMode ? 'Dark' : 'Light'} Mode
+                  Study Hall Management
                 </p>
               </div>
             </div>
@@ -227,7 +229,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
               onClick={handleCloseDrawer}
               className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
               aria-label="Close navigation drawer"
-              title="Close Navigation Drawer"
+              title="Close menu"
             >
               <X className="w-4 h-4" />
             </button>
@@ -237,9 +239,8 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
         {/* Section Label */}
         <div className="px-5 pt-4 pb-1.5 flex items-center justify-between">
           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Library Tools &amp; Configuration
+            Menu
           </span>
-          <span className="text-[10px] font-mono text-slate-400">{drawerItems.length} items</span>
         </div>
 
         {/* NavigationDrawerItem List */}
@@ -286,7 +287,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                 {isPaletteItem && isPaletteExpanded && (
                   <div className="mx-2 mb-2 mt-1 p-2.5 bg-slate-900 rounded-2xl space-y-1 animate-in fade-in duration-150">
                     <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                      Select App Color Scheme
+                      Select Theme Color
                     </div>
                     {(Object.keys(THEME_PALETTES) as ThemePalette[]).map((paletteKey) => {
                       const p = THEME_PALETTES[paletteKey];
@@ -331,7 +332,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
               target="_blank"
               rel="noopener noreferrer"
               className="w-full px-3.5 py-3 rounded-2xl text-left flex items-center justify-between gap-3 hover:bg-amber-500/10 active:bg-amber-500/20 transition-all group border border-transparent hover:border-amber-500/30"
-              title="Open GitHub Repository & APK Releases"
+              title="Open App Version & Release Information"
             >
               <div className="flex items-center gap-3.5 min-w-0">
                 <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-600 flex items-center justify-center shrink-0">
@@ -345,7 +346,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                     </span>
                   </div>
                   <div className="text-[11px] text-slate-500 truncate mt-0.5">
-                    GitHub Repository &amp; APK Releases
+                    Production Release
                   </div>
                 </div>
               </div>
@@ -354,31 +355,16 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
           </div>
         </div>
 
-        {/* Drawer Footer with Jetpack Compose Code Inspector & Embedded Version Link */}
-        <div className="p-3.5 border-t border-slate-200/60 bg-slate-50/80 shrink-0 space-y-2">
-          <button
-            type="button"
-            onClick={() => {
-              handleCloseDrawer();
-              onViewKotlinDrawerCode();
-            }}
-            className="w-full px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center justify-between transition-colors shadow-xs"
-          >
-            <span className="flex items-center gap-2">
-              <Code2 className="w-4 h-4 text-amber-400" />
-              <span>View Compose Drawer &amp; FAB Code</span>
-            </span>
-            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-          </button>
-
+        {/* Clean Production Drawer Footer */}
+        <div className="p-3.5 border-t border-slate-200/60 bg-slate-50/80 shrink-0">
           <div className="flex items-center justify-between px-1 text-[11px] text-slate-500">
-            <span>Lakshay Library (LibTrack)</span>
+            <span>Lakshay Library</span>
             <a
               href={GITHUB_REPO_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="font-mono font-bold text-amber-600 hover:text-amber-500 underline underline-offset-2 inline-flex items-center gap-1 transition-colors"
-              title="Open GitHub Repository (keshav-sharp/lakshay-library-management)"
+              title="Version & Release Notes"
             >
               <span>{APP_VERSION}</span>
               <ExternalLink className="w-3 h-3" />

@@ -27,28 +27,28 @@ A production-grade, offline-first library and study hall management system built
    - Automatically creates a structured `Lakshay_Library_Master` root folder in Google Drive with dedicated subfolders:
      - `Lakshay_Library_Master/Master_Sync_Backups/` for primary writer / secondary follower daily database snapshots (`Lakshay_Library_Master_Sync.json`).
      - `Lakshay_Library_Master/Automated_Logs/` for real-time active client presence (`active_clients_status.json`) and automated crash diagnostics (`crash_and_error_logs.json`).
-6. **Active Client Presence & Crash Diagnostics**:
-   - Real-time active devices heartbeat tracking and automated crash/error logging synced to `Lakshay_Library_Master/Automated_Logs` on Google Drive.
-7. **Native Mobile Ergonomics & Design**:
-   - Swipe-to-switch gestures between navigation tabs, custom warm-toned empty state illustrations, and a left-sliding Modal Navigation Drawer with embedded GitHub version link (`v1.3.3`).
+6. **App Launch & Exit Confirmation Animations**:
+   - Branded launch splash animation (`AppLaunchSplash`) on startup and an interactive Exit Confirmation dialog (`ExitAppModal`) with a farewell animation when pressing Back on the home screen or selecting **Exit App** in the Navigation Drawer.
+7. **Native Mobile Ergonomics & Design (`v2.0.0` Production Release)**:
+   - Swipe-to-switch gestures between navigation tabs, custom warm-toned empty state illustrations, zero pre-populated demo records (`0` students on clean install), and a left-sliding Navigation Drawer with embedded GitHub version link (`v2.0.0`).
 
 ---
 
 ## 📂 Project Architecture
 
 ```tree
-├── public/                 # Favicons, illustrations & PWA assets
+├── public/                 # App icons, illustrations & PWA manifest
 ├── src/
-│   ├── components/         # Modular React UI components & modals
+│   ├── components/         # Modular React UI components, modals & lifecycle animations
 │   ├── context/            # Theme & state management context
-│   ├── data/               # Mock datasets & Kotlin code snippet templates
-│   ├── services/           # Storage, export, Google Drive sync, and WorkManager engines
+│   ├── data/               # Production defaults & shift configurations
+│   ├── services/           # Storage, export, Google Drive sync, and backup engines
 │   ├── types/              # TypeScript interfaces (Student, Shift, Seat, Theme)
 │   ├── App.tsx             # Root application component & touch gesture handler
 │   ├── main.tsx            # React DOM entry point
 │   └── index.css           # Tailwind CSS imports & custom slide animations
-├── capacitor.config.json   # Capacitor mobile runtime configuration
-├── package.json            # Dependencies & build scripts
+├── capacitor.config.json   # Capacitor Android configuration (com.lakshaylibrary.app)
+├── package.json            # Dependencies & build scripts (v2.0.0)
 └── vite.config.ts          # Vite bundler configuration
 ```
 
@@ -87,18 +87,18 @@ A production-grade, offline-first library and study hall management system built
 ### Option 1: Direct 1-Click APK Download from GitHub Releases (Recommended)
 Every tagged version of this app includes a pre-compiled `.apk` attached directly to **[GitHub Releases](https://github.com/keshav-sharp/lakshay-library-management/releases)**:
 
-- **Direct Latest APK URL**:  
+- **Direct Latest APK URL (`v2.0.0`)**:  
   👉 **[`https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk`](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
-- **All Version Releases (`v1.0.0`, `v1.3.3`, etc.)**:  
+- **All Version Releases (`v1.0.0` – `v2.0.0`)**:  
   👉 **[`https://github.com/keshav-sharp/lakshay-library-management/releases`](https://github.com/keshav-sharp/lakshay-library-management/releases)**
 
 ### Option 2: Download from GitHub Actions Build Artifacts
-GitHub Actions also compiles the APK automatically on every push to `main`:
+GitHub Actions also compiles and publishes the APK automatically on every push to `main`:
 
 1. Open the **[Actions Workflow Runs](https://github.com/keshav-sharp/lakshay-library-management/actions/workflows/build-apk.yml)**.
-2. Click on the latest green workflow run (**Build Android APK**).
+2. Click on the latest green workflow run (**Build & Publish Android APK Release**).
 3. Scroll down to **Artifacts** at the bottom of the page and click **`LakshayLibrary-Android-APK`**.
-4. Extract the `.zip` file and tap `app-debug.apk` to install!
+4. Extract the `.zip` file and tap `LakshayLibrary.apk` to install!
 
 ### Option 3: 1-Click PWA Install (No APK Needed)
 This app is a certified Progressive Web App (PWA):
@@ -129,9 +129,9 @@ This app is a certified Progressive Web App (PWA):
 
 | Channel | Direct Link | Description |
 | :--- | :--- | :--- |
-| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v1.3.3)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
-| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v1.3.3`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
-| **GitHub Actions Build Artifacts** | ⚙️ **[Automated CI APK Builds](https://github.com/keshav-sharp/lakshay-library-management/actions/workflows/build-apk.yml)** | Every commit to `main` automatically compiles a fresh `LakshayLibrary-Android-APK` artifact. |
+| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v2.0.0)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
+| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v2.0.0`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
+| **GitHub Actions Build Artifacts** | ⚙️ **[Automated CI APK Builds](https://github.com/keshav-sharp/lakshay-library-management/actions/workflows/build-apk.yml)** | Every commit to `main` automatically compiles and releases a fresh `LakshayLibrary.apk`. |
 | **Full Changelog** | 📜 **[View `CHANGELOG.md`](CHANGELOG.md)** | Detailed version-by-version history of features, fixes, and improvements. |
 
 ---
