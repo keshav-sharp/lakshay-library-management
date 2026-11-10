@@ -788,6 +788,42 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                     />
                   </div>
                 )}
+
+                {/* In-App Sharing & Secondary Sync Guide Note */}
+                <div className="p-3.5 rounded-xl bg-amber-50/75 border border-amber-200/80 text-[11px] text-slate-700 space-y-2">
+                  <div className="font-bold text-amber-900 flex items-center justify-between gap-2">
+                    <span>📌 Note: How Secondary Phone Accesses {MASTER_DRIVE_ROOT_FOLDER_NAME}</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                      Quick Steps
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 leading-relaxed">
+                    <div>
+                      <strong className="text-slate-900">• Same Gmail on Both Phones:</strong> Sign in
+                      with the same Google account on both phones. Set Phone 1 to{' '}
+                      <strong>Primary Phone</strong> (tap <em>Push Primary Snapshot</em>) and Phone 2 to{' '}
+                      <strong>Secondary Phone</strong> (tap <em>Pull Daily Snapshot</em>).
+                    </div>
+                    <div>
+                      <strong className="text-slate-900">• Different Gmail on Secondary Phone:</strong>
+                      <ol className="list-decimal list-inside pl-1 mt-0.5 space-y-0.5 text-slate-600">
+                        <li>
+                          On the <strong>Primary Phone</strong>, enter the Secondary user&apos;s Gmail
+                          address in the box above and tap <strong>Grant Access</strong> (or share the{' '}
+                          <code>{MASTER_DRIVE_ROOT_FOLDER_NAME}</code> folder as <em>Viewer</em> in the
+                          Google Drive app).
+                        </li>
+                        <li>
+                          On the <strong>Secondary Phone</strong>, select <strong>Secondary Phone</strong>{' '}
+                          role, sign in with that Secondary Gmail account, and tap{' '}
+                          <strong>Pull Daily Snapshot from Primary</strong>. The app automatically finds
+                          the shared <code>{MASTER_DRIVE_BACKUP_FILENAME}</code> inside your Google
+                          Drive&apos;s <strong>&quot;Shared with me&quot;</strong>!
+                        </li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* 2. Google Account Connection & Sign-In Data Storage */}

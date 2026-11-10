@@ -29,8 +29,8 @@ A production-grade, offline-first library and study hall management system built
      - `Lakshay_Library_Master/Automated_Logs/` for real-time active client presence (`active_clients_status.json`) and automated crash diagnostics (`crash_and_error_logs.json`).
 6. **App Launch & Gesture-Based Exit Confirmation Animations**:
    - Branded launch splash animation (`AppLaunchSplash`) on startup and an interactive Exit Confirmation dialog (`ExitAppModal`) with a farewell animation triggered when the user performs an Android Back gesture or edge back-swipe on the home screen.
-7. **Native Mobile Ergonomics & Design (`v2.0.1` Production Release)**:
-   - Swipe-to-switch gestures between navigation tabs, custom warm-toned empty state illustrations, zero pre-populated demo records (`0` students on clean install), and a left-sliding Navigation Drawer with embedded GitHub version link (`v2.0.1`).
+7. **Native Mobile Ergonomics & Design (`v2.0.2` Production Release)**:
+   - Swipe-to-switch gestures between navigation tabs, custom warm-toned empty state illustrations, zero pre-populated demo records (`0` students on clean install), cross-account Google Drive folder sharing, and a left-sliding Navigation Drawer with embedded GitHub version link (`v2.0.2`).
 
 ---
 
@@ -48,7 +48,7 @@ A production-grade, offline-first library and study hall management system built
 │   ├── main.tsx            # React DOM entry point
 │   └── index.css           # Tailwind CSS imports & custom slide animations
 ├── capacitor.config.json   # Capacitor Android configuration (com.lakshaylibrary.app)
-├── package.json            # Dependencies & build scripts (v2.0.1)
+├── package.json            # Dependencies & build scripts (v2.0.2)
 └── vite.config.ts          # Vite bundler configuration
 ```
 
@@ -87,9 +87,9 @@ A production-grade, offline-first library and study hall management system built
 ### Option 1: Direct 1-Click APK Download from GitHub Releases (Recommended)
 Every tagged version of this app includes a pre-compiled `.apk` attached directly to **[GitHub Releases](https://github.com/keshav-sharp/lakshay-library-management/releases)**:
 
-- **Direct Latest APK URL (`v2.0.1`)**:  
+- **Direct Latest APK URL (`v2.0.2`)**:  
   👉 **[`https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk`](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
-- **All Version Releases (`v1.0.0` – `v2.0.1`)**:  
+- **All Version Releases (`v1.0.0` – `v2.0.2`)**:  
   👉 **[`https://github.com/keshav-sharp/lakshay-library-management/releases`](https://github.com/keshav-sharp/lakshay-library-management/releases)**
 
 ### Option 2: Download from GitHub Actions Build Artifacts
@@ -149,8 +149,8 @@ Curious about the technical challenges we solved while building this app across 
 
 | Channel | Direct Link | Description |
 | :--- | :--- | :--- |
-| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v2.0.1)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
-| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v2.0.1`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
+| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v2.0.2)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
+| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v2.0.2`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
 | **Engineering Issues & Fixes Log** | 🛠️ **[View `ENGINEERING_LOG.md`](ENGINEERING_LOG.md)** | Root-cause analysis and fixes for all 8 engineering & security challenges solved during development. |
 | **Full Changelog** | 📜 **[View `CHANGELOG.md`](CHANGELOG.md)** | Detailed version-by-version history of features, fixes, and improvements. |
 

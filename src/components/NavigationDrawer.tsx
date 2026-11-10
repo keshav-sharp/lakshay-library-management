@@ -23,7 +23,7 @@ import {
   LogOut,
 } from 'lucide-react';
 
-export const APP_VERSION = 'v2.0.1';
+export const APP_VERSION = 'v2.0.2';
 export const GITHUB_REPO_URL = 'https://github.com/keshav-sharp/lakshay-library-management';
 
 export interface DrawerMenuItem {

@@ -6,10 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v2.0.2] - 2026-11-10 (Cross-Account Gmail Sharing & In-App Sync Guide)
+
+### Direct APK Download
+- 📦 **[Download `LakshayLibrary-v2.0.2.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 🔗 **[View Release Notes on GitHub (`v2.0.2`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v2.0.2)**
+
+### Added & Improved
+- **Cross-Account Gmail Sync (`Lakshay_Library_Master`)**:
+  - Added 1-tap **Grant Access (`shareMasterFolderWithEmail`)** on the Primary Phone so owners can share `Lakshay_Library_Master` and `Master_Sync_Backups` with a Secondary phone's Gmail address directly from the app.
+  - Added automatic **"Shared with me" Discovery (`drive.readonly` + `includeItemsFromAllDrives`)** and an optional Shared Folder Link/ID input so a Secondary Phone signed in with a different Gmail address automatically locates and pulls `Lakshay_Library_Master_Sync.json`.
+- **In-App Sharing & Secondary Setup Guide Note**:
+  - Added a dedicated **"📌 Note: How Secondary Phone Accesses `Lakshay_Library_Master`"** guide inside **Google Drive Daily Sync & Primary Role** covering both Same-Gmail and Different-Gmail setup steps.
+- **Engineering Challenges & Fixes Log (`ENGINEERING_LOG.md`)**:
+  - Added full root-cause post-mortems and linked resolved GitHub Issues `#1`–`#8`.
+
+---
+
 ## [v2.0.1] - 2026-11-10 (Google Sign-In Fix, Persistent Auth Storage & Gesture Exit)
 
 ### Direct APK Download
-- 📦 **[Download `LakshayLibrary-v2.0.1.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 📦 **[Download `LakshayLibrary-v2.0.1.apk`](https://github.com/keshav-sharp/lakshay-library-management/releases/download/v2.0.1/LakshayLibrary-v2.0.1.apk)**
 - 🔗 **[View Release Notes on GitHub (`v2.0.1`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v2.0.1)**
 
 ### Fixed & Changed
