@@ -269,6 +269,7 @@ runTest('Financial journal write failure is injected and surfaced', () => {
   localStorage.failOnSetKey = FINANCIAL_JOURNAL_KEY;
   assert.throws(() => saveFinancialJournal([]), /persistence failure/);
   localStorage.failOnSetKey = null;
+  setRecoveryOnlyMode(false);
 });
 
 runTest('Recovery fails closed when storage reads are unavailable', () => {
