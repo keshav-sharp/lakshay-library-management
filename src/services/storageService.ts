@@ -1694,12 +1694,13 @@ export const getFinancialJournal = (): FinancialJournalEntry[] => {
     throw new Error('Financial journal schema is invalid. Recovery-only mode enabled; journal bytes have been preserved.');
   }
   return parsed as FinancialJournalEntry[];
-}; = (entries: FinancialJournalEntry[]): boolean => {
+};
+
+export const saveFinancialJournal = (entries: FinancialJournalEntry[]): boolean => {
   try {
     const serialized = JSON.stringify(entries);
     localStorage.setItem(FINANCIAL_JOURNAL_KEY, serialized);
-    const verification = localStorage.getItem(FINANCIAL_JOURNAL_KEY);
-    if (verification !== serialized) {
+    if (localStorage.getItem(FINANCIAL_JOURNAL_KEY) !== serialized) {
       throw new Error('Financial journal storage verification check failed.');
     }
     return true;
