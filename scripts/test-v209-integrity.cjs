@@ -284,7 +284,7 @@ runTest('Recovery fails closed when storage reads are unavailable', () => {
 runTest('Seat, shift, and student attendance mutations are blocked in recovery-only mode', () => {
   localStorage.clear();
   setRecoveryOnlyMode(true);
-  assert.throws(() => addCustomShift({ name: 'Test Shift', startTime: '08:00', endTime: '12:00' }), /recovery-only mode/);
+  assert.throws(() => addCustomShift({ label: 'Test Shift', timings: '08:00 AM - 12:00 PM', defaultFee: 500 }), /recovery-only mode/);
   assert.throws(() => addCustomSeat('Z-01'), /recovery-only mode/);
   setRecoveryOnlyMode(false);
 });
