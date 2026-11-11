@@ -42,7 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - Routed all local storage writes and reads for sensitive domains (`STUDENTS`, `PAYMENTS`, `DAILY_ATTENDANCE`, `FINANCIAL_JOURNAL`, `SNAPSHOT_BACKUP`) through `secureSetItem` and `secureGetItem`.
 - **CodeQL & Dependabot Vulnerability Remediation**:
   - Resolved all GitHub CodeQL static analysis findings regarding cleartext local storage.
-  - Remediated high and moderate severity Dependabot vulnerabilities in transitive dependencies (`@grpc/grpc-js`, `minimatch`, `glob`, `rimraf`, `tar`) via explicit package lock overrides.
+  - Resolved CodeQL alert #66 ("Workflow does not contain permissions") in `.github/workflows/build-apk.yml` with explicit top-level and job-level `permissions: contents: read` blocks.
+  - Remediated high and moderate severity Dependabot vulnerabilities in transitive dependencies (`@grpc/grpc-js`, `minimatch`, `glob`, `rimraf`, `tar`) via explicit package lock overrides, achieving 0 `npm audit` vulnerabilities across 486 dependencies.
 - **Capacitor Navigation Security**:
   - Removed wildcard navigation (`*`) in `capacitor.config.json` and restricted WebView routing to explicit allowlisted application, Google OAuth, and Drive domains.
 - **Automated Regression Test Suite**:

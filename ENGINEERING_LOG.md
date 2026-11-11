@@ -54,11 +54,12 @@ All tracked issues are also logged and closed in the **[GitHub Issues Tracker](h
   3. **Sanitized Storage Operations (`src/services/storageService.ts`)**:
      - Routed all local storage writes and reads for sensitive domains (`STUDENTS_STORAGE_KEY`, `PAYMENTS_STORAGE_KEY`, `DAILY_ATTENDANCE_STORAGE_KEY`, `FINANCIAL_JOURNAL_KEY`, `PREVIOUS_SNAPSHOT_STORAGE_KEY`) through `secureSetItem` and `secureGetItem`.
      - Standardized `secureGetItem` to fail closed: unauthenticated or corrupted ciphertext payloads are never returned in plain text.
-  4. **Dependabot Vulnerability Remediation**:
-     - Configured package overrides in `package.json` for `@grpc/grpc-js` (`^1.14.0`), `minimatch` (`^10.0.1`), `glob` (`^10.4.5`), `rimraf` (`^5.0.10`), and `tar` (`^7.5.21`).
+  4. **Dependabot & CodeQL Workflow Security Remediation**:
+     - Remediated CodeQL alert #66 ("Workflow does not contain permissions") in `.github/workflows/build-apk.yml` by adding explicit `permissions: contents: read` blocks at top level and job level.
+     - Configured package lock overrides in `package.json` (`rimraf@3.0.2`, `glob@7.2.3`, `minimatch@3.1.2`, `tar@7.5.23`, `@grpc/grpc-js@1.14.7`) eliminating all Dependabot vulnerabilities to achieve **0 npm audit vulnerabilities** across 486 dependencies.
   5. **100% Test Passing & Build Verification**:
      - Expanded `scripts/test-v209-integrity.cjs` with 14 cryptographic tamper-detection, bit-flipping, tag-modification, wrong-key, missing passphrase, and cross-device backup scenarios.
-     - Confirmed all 34 automated unit and integrity tests pass, TypeScript compilation (`tsc --noEmit`) passes with 0 errors, and production Vite build succeeds.
+     - Confirmed all 35 automated unit and integrity tests pass, TypeScript compilation (`tsc --noEmit`) passes with 0 errors, and production Vite build succeeds in 2.81s.
 
 ### Issue #16: Safe Storage Initialization, Write-Ahead Financial Journal & Financial Integrity (`v2.0.9`)
 - **Symptom**:
