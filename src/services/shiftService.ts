@@ -1,4 +1,4 @@
-import { assertProductionWritesAllowed } from './storageService';
+import { assertProductionWritesAllowed, isRecoveryOnlyMode, setRecoveryOnlyMode } from './storageService';
 import { ShiftItem, INITIAL_SHIFTS } from '../types/shift';
 
 const SHIFTS_STORAGE_KEY = 'lakshay_app_shifts';
@@ -27,17 +27,20 @@ const notifyShiftListeners = () => {
 export const getStoredShifts = (): ShiftItem[] => {
   try {
     const raw = localStorage.getItem(SHIFTS_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(SHIFTS_STORAGE_KEY, JSON.stringify(INITIAL_SHIFTS));
+    if (raw === null) {
+      if (!isRecoveryOnlyMode()) {
+        localStorage.setItem(SHIFTS_STORAGE_KEY, JSON.stringify(INITIAL_SHIFTS));
+      }
       return INITIAL_SHIFTS;
     }
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
-      localStorage.setItem(SHIFTS_STORAGE_KEY, JSON.stringify(INITIAL_SHIFTS));
-      return INITIAL_SHIFTS;
+      setRecoveryOnlyMode(true);
+      return INITIAL_SHIFTS; // Display fallback only; preserve the original bytes.
     }
-    return parsed;
+    return parsed as ShiftItem[];
   } catch {
+    setRecoveryOnlyMode(true);
     return INITIAL_SHIFTS;
   }
 };
