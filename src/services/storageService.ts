@@ -1056,7 +1056,10 @@ export interface SafeInitReport {
 }
 
 const RECOVERY_ONLY_MODE_KEY = 'libtrack_recovery_only_mode';
+let recoveryOnlyModeInMemory = false;
+
 export const isRecoveryOnlyMode = (): boolean => {
+  if (recoveryOnlyModeInMemory) return true;
   try {
     return localStorage.getItem(RECOVERY_ONLY_MODE_KEY) === '1';
   } catch {
@@ -1064,12 +1067,25 @@ export const isRecoveryOnlyMode = (): boolean => {
     return true;
   }
 };
+
 export const setRecoveryOnlyMode = (active: boolean): void => {
+  if (active) {
+    // Set the in-memory latch first; a quota/security failure must not reopen writes.
+    recoveryOnlyModeInMemory = true;
+    try {
+      localStorage.setItem(RECOVERY_ONLY_MODE_KEY, '1');
+    } catch {
+      // The in-memory latch remains active for this runtime.
+    }
+    return;
+  }
+
   try {
-    if (active) localStorage.setItem(RECOVERY_ONLY_MODE_KEY, '1');
-    else localStorage.removeItem(RECOVERY_ONLY_MODE_KEY);
+    localStorage.removeItem(RECOVERY_ONLY_MODE_KEY);
+    recoveryOnlyModeInMemory = false;
   } catch {
-    // Ignore
+    // Keep the in-memory latch active if persistent state cannot be cleared safely.
+    recoveryOnlyModeInMemory = true;
   }
 };
 
