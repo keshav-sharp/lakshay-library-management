@@ -195,6 +195,43 @@ runTest('Crash Recovery reconciles payment written but due-date advancement inte
   assert.strictEqual(getFinancialJournal().length, 0); // Pruned
 });
 
+runTest('Crash recovery cancels prepared entry if payment record is missing', () => {
+  localStorage.clear();
+  const student = { id: 'std_missing_pay', name: 'Missing Pay Test', seatNumber: '6', nextFeeDueDate: '2026-11-01', admissionDate: '2026-10-01', monthlyFee: 1000, shiftTimings: 'Morning', status: 'active' };
+  localStorage.setItem('libtrack_firestore_students', JSON.stringify([student]));
+  localStorage.setItem('libtrack_firestore_payments', JSON.stringify({}));
+
+  const journal = [{
+    journalId: 'jnl_missing_pay',
+    idempotencyKey: 'idemp_missing',
+    paymentId: 'pay_missing',
+    receiptNumber: 'REC-2026-888',
+    studentId: 'std_missing_pay',
+    studentName: 'Missing Pay Test',
+    oldDueDate: '2026-11-01',
+    newDueDate: '2026-12-01',
+    amount: 1000,
+    amountPaise: 100000,
+    paymentMode: 'UPI',
+    timestampISO: new Date().toISOString(),
+    state: 'PREPARED',
+  }];
+  saveFinancialJournal(journal);
+  localStorage.setItem('lakshay_library_prod_v2_0_0_clean', '1');
+
+  const report = recoverPendingFinancialTransactions();
+  assert.strictEqual(report.cancelledCount, 1);
+  assert.strictEqual(getFinancialJournal().length, 0);
+});
+
+runTest('Repeated recovery execution is safe and idempotent', () => {
+  localStorage.clear();
+  const report1 = recoverPendingFinancialTransactions();
+  const report2 = recoverPendingFinancialTransactions();
+  assert.strictEqual(report1.recoveredCount, 0);
+  assert.strictEqual(report2.recoveredCount, 0);
+});
+
 // 4. Idempotency & Payment Transactions
 console.log('\nGroup 4: Payment Idempotency & Consecutive Monthly Payments');
 runTest('Mark student paid creates payment and advances due date atomically', () => {
