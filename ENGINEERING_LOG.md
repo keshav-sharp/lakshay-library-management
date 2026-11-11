@@ -26,10 +26,39 @@ All tracked issues are also logged and closed in the **[GitHub Issues Tracker](h
 | **[#14](https://github.com/keshav-sharp/lakshay-library-management/issues/14)** | **Mobile Viewport Optimization, Help & FAQ, UPI Sync, Security Policy** | Sidewise scrollbar on mobile viewports, cluttered inline explanatory text, standalone color palette drawer clutter, and missing cross-device sync for library UPI/standee details | Viewport width overflow in headers and modal containers, uncentralized documentation, decoupled UPI config in MasterSyncPayload, and unconfigured GitHub security policy | Enforced strict zero-horizontal-scroll viewport containment (`overflow-x: hidden`), built dedicated `HelpFaqModal`, moved palette to Settings, synchronized `upiConfig` cross-device via `triggerLiveAutoSync`, and established GitHub security policy (`SECURITY.md`) | `v2.0.7` |
 | **[#15](https://github.com/keshav-sharp/lakshay-library-management/issues/15)** | **Financial Ledger & Receipts** | Attendance clutter in desk workflow and lack of official downloadable fee receipts for student fee collection | Desk staff lacked official payment receipts for students, while QR attendance check-in added unnecessary UI complexity | Retired active Attendance UI while keeping historical logs intact, implemented offline A4 jsPDF receipt generator with immutable snapshots, and added customizable receipt branding | `v2.0.8` |
 | **[#16](https://github.com/keshav-sharp/lakshay-library-management/issues/16)** | **Data Safety & Financial Integrity** | Startup storage wiping on missing marker, payment due-date advancement without payment record on crash, cross-device payment ID collision | Destructive `ensureProductionCleanInit` wiped storage on absent marker; non-atomic multi-key writes lacked intent journaling; timestamp payment IDs lacked device partitioning | Replaced with non-destructive `ensureSafeProductionInit` with 6 states & quarantine; implemented Write-Ahead Financial Journal with 2-phase commit & crash recovery; enforced idempotency keys & device-partitioned UUIDs (`pay_D01_<uuid>`); audited `amountToWordsINR`; hardened Capacitor navigation allowlist | `v2.0.9` |
+| **[#17](https://github.com/keshav-sharp/lakshay-library-management/issues/17)** | **Genuine AES-256-GCM Storage Encryption & Security Remediation** | Unauthenticated Base64 storage, hardcoded secrets, cleartext localStorage, and open Dependabot vulnerability alerts | Insecure Base64 pseudo-encryption in storage layer; hardcoded master secret; cleartext writes in storage helpers; outdated transitive package dependencies (`@grpc/grpc-js`, `minimatch`, `glob`, `rimraf`, `tar`) | Upgraded to Web Crypto AES-256-GCM authenticated encryption with 210,000 PBKDF2 iterations and 96-bit nonces; removed default secrets & localStorage passphrase persistence for transient in-memory vault; sanitized all sensitive storage paths (`STUDENTS`, `PAYMENTS`, `ATTENDANCE`, `JOURNAL`) via `secureSetItem`/`secureGetItem`; updated package lock overrides | `v2.0.9` |
 
 ---
 
 ## 🔍 Detailed Post-Mortems & Technical Solutions
+
+### Issue #17: Genuine AES-256-GCM Storage Encryption, In-Memory Vault & Security Remediation (`v2.0.9`)
+- **Symptom**:
+  1. Local storage data was encoded using unauthenticated Base64 pseudo-encryption (`STORAGE_SALT` + `btoa`), leaving sensitive student records, financial journal entries, and payment ledgers readable and susceptible to tampering.
+  2. A default master secret (`DEFAULT_ENTERPRISE_PASSPHRASE`) was hardcoded in source code, and staff passphrases were written in cleartext to `localStorage`.
+  3. GitHub Code Scanning (CodeQL) flagged 52 open cleartext storage alerts on `main`.
+  4. GitHub Dependabot reported open vulnerability alerts for `@grpc/grpc-js`, `minimatch`, `glob`, `rimraf`, and `tar`.
+- **Root Cause**:
+  1. The storage layer used legacy Base64 string encoding instead of genuine authenticated Web Crypto AES encryption.
+  2. Default secrets and persistent passphrase keys were stored directly in `localStorage`.
+  3. Individual storage methods (`getStoredPayments`, `getStoredDailyAttendance`, `recoverPendingFinancialTransactions`) called `localStorage.setItem` directly with unencrypted JSON strings.
+  4. Transitive library dependencies pulled in unpatched package versions.
+- **Fix Applied**:
+  1. **Genuine Authenticated AES-256-GCM Encryption (`src/services/storageEncryption.ts`)**:
+     - Implemented Web Crypto **AES-256-GCM** authenticated encryption with 128-bit native authentication tags via `@noble/ciphers/aes`.
+     - Generates unique 96-bit (12-byte) initialization vectors / nonces per encryption operation using `window.crypto.getRandomValues()`.
+     - Derives 256-bit AES keys using PBKDF2 with **210,000 iterations** of SHA-256 (OWASP compliant) combining staff recovery passphrases with per-device storage salts (`libtrack_device_storage_salt_v2`).
+  2. **In-Memory Vault & Zero Passphrase Persistence**:
+     - Removed hardcoded default secrets and `localStorage` passphrase keys.
+     - Staff recovery passphrases are held transiently in secure module memory during the authenticated session (`setStaffPassphrase`, `getStaffPassphrase`, `clearStaffPassphrase`).
+  3. **Sanitized Storage Operations (`src/services/storageService.ts`)**:
+     - Routed all local storage writes and reads for sensitive domains (`STUDENTS_STORAGE_KEY`, `PAYMENTS_STORAGE_KEY`, `DAILY_ATTENDANCE_STORAGE_KEY`, `FINANCIAL_JOURNAL_KEY`, `PREVIOUS_SNAPSHOT_STORAGE_KEY`) through `secureSetItem` and `secureGetItem`.
+     - Standardized `secureGetItem` to fail closed: unauthenticated or corrupted ciphertext payloads are never returned in plain text.
+  4. **Dependabot Vulnerability Remediation**:
+     - Configured package overrides in `package.json` for `@grpc/grpc-js` (`^1.14.0`), `minimatch` (`^10.0.1`), `glob` (`^10.4.5`), `rimraf` (`^5.0.10`), and `tar` (`^7.5.21`).
+  5. **100% Test Passing & Build Verification**:
+     - Expanded `scripts/test-v209-integrity.cjs` with 14 cryptographic tamper-detection, bit-flipping, tag-modification, wrong-key, missing passphrase, and cross-device backup scenarios.
+     - Confirmed all 34 automated unit and integrity tests pass, TypeScript compilation (`tsc --noEmit`) passes with 0 errors, and production Vite build succeeds.
 
 ### Issue #16: Safe Storage Initialization, Write-Ahead Financial Journal & Financial Integrity (`v2.0.9`)
 - **Symptom**:

@@ -47,6 +47,12 @@ A production-grade, offline-first library and study hall management system built
     - Replaced legacy destructive storage initialization with `ensureSafeProductionInit` supporting 6 non-destructive states, verified local backups, and timestamped quarantine of corrupted data.
     - Implemented a Write-Ahead Financial Journal with 2-phase commit and startup crash recovery (`recoverPendingFinancialTransactions()`) ensuring 100% parity between student due dates and payment history.
     - Enforced client idempotency key tracking, collision-resistant device-partitioned UUIDs (`pay_D01_<uuid>`), strict monetary validation with integer paise, audited Indian Rupee amount-to-words, and hardened Capacitor navigation.
+14. **Genuine AES-256-GCM Storage Encryption, In-Memory Vault & CodeQL Remediation (`v2.0.9`)**:
+    - Upgraded local storage security layer to genuine Web Crypto **AES-256-GCM** authenticated encryption with 128-bit authentication tags and unique 96-bit (12-byte) nonces generated via `crypto.getRandomValues()`.
+    - Derives 256-bit encryption keys using PBKDF2 with **210,000 iterations** of SHA-256 (OWASP compliant) combining enterprise staff recovery passphrases with per-device storage salts.
+    - Removed hardcoded secrets and `localStorage` passphrase persistence in favor of transient in-memory session vault storage (`setStaffPassphrase`, `getStaffPassphrase`, `clearStaffPassphrase`).
+    - Enforced fail-closed security: unauthenticated or corrupted ciphertext payloads are never returned in cleartext.
+    - Remediated CodeQL static analysis cleartext storage findings and Dependabot dependency vulnerabilities (`@grpc/grpc-js`, `minimatch`, `glob`, `rimraf`, `tar`).
 
 
 ---
@@ -200,6 +206,7 @@ Curious about the technical challenges we solved while building this app across 
 | **[#14](https://github.com/keshav-sharp/lakshay-library-management/issues/14)** | Mobile UI & Security | Enforced zero-horizontal-scroll viewport containment, built dedicated Help & FAQ Center, moved palette under Settings, cross-synced UPI config, and set up GitHub security policy | `v2.0.7` |
 | **[#15](https://github.com/keshav-sharp/lakshay-library-management/issues/15)** | Financial Ledger & Receipts | Built 100% offline client-side PDF Fee Receipts (jsPDF) with immutable snapshots, customizable library settings, and retired active attendance UI while preserving historical records | `v2.0.8` |
 | **[#16](https://github.com/keshav-sharp/lakshay-library-management/issues/16)** | Data Safety & Financial Integrity | Fixed storage wiping on missing marker via `ensureSafeProductionInit`, built Write-Ahead Financial Journal with 2-phase commit & crash recovery, added idempotency & UUIDs | `v2.0.9` |
+| **[#17](https://github.com/keshav-sharp/lakshay-library-management/issues/17)** | Genuine AES-256-GCM Storage Encryption & Security | Implemented Web Crypto AES-256-GCM encryption with 210,000 PBKDF2 iterations, in-memory session vault, zero passphrase persistence, and resolved CodeQL & Dependabot advisories | `v2.0.9` |
 
 
 ---
@@ -208,9 +215,9 @@ Curious about the technical challenges we solved while building this app across 
 
 | Channel | Direct Link | Description |
 | :--- | :--- | :--- |
-| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v2.0.8)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
-| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v2.0.8`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
-| **Engineering Issues & Fixes Log** | 🛠️ **[View `ENGINEERING_LOG.md`](ENGINEERING_LOG.md)** | Root-cause analysis and fixes for all 15 engineering & security challenges solved during development. |
+| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v2.0.9)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
+| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v2.0.9`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
+| **Engineering Issues & Fixes Log** | 🛠️ **[View `ENGINEERING_LOG.md`](ENGINEERING_LOG.md)** | Root-cause analysis and fixes for all 17 engineering & security challenges solved during development. |
 | **Full Changelog** | 📜 **[View `CHANGELOG.md`](CHANGELOG.md)** | Detailed version-by-version history of features, fixes, and improvements. |
 
 ---

@@ -33,10 +33,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Financial Merge Conflict Protection & Quarantine (`importSyncedFirestoreSnapshot`)**:
   - Enforced deep comparison of immutable financial attributes (`amountPaid`, `paymentDate`, `studentId`, `receiptNumber`) during Google Drive and offline sync merges.
   - Quarantines conflicting financial records into `libtrack_quarantined_payment_conflicts` for administrator inspection rather than silently overwriting local numbers.
+- **Genuine AES-256-GCM Authenticated Storage Encryption Layer (`storageEncryption`)**:
+  - Implemented genuine Web Crypto **AES-256-GCM** authenticated encryption with 128-bit authentication tags via `@noble/ciphers/aes`.
+  - Generates unique 96-bit (12-byte) initialization vectors / nonces per encryption operation via `crypto.getRandomValues()`.
+  - Derives 256-bit encryption keys using PBKDF2 with **210,000 iterations** of SHA-256 (OWASP compliant) combining staff recovery passphrases with per-device storage salts.
+  - Eliminated hardcoded default secrets and `localStorage` passphrase persistence in favor of transient in-memory session vault storage (`setStaffPassphrase`, `getStaffPassphrase`, `clearStaffPassphrase`).
+  - Enforced fail-closed security: corrupted or unauthenticated ciphertext payloads are never returned as raw text or plaintext fallbacks.
+  - Routed all local storage writes and reads for sensitive domains (`STUDENTS`, `PAYMENTS`, `DAILY_ATTENDANCE`, `FINANCIAL_JOURNAL`, `SNAPSHOT_BACKUP`) through `secureSetItem` and `secureGetItem`.
+- **CodeQL & Dependabot Vulnerability Remediation**:
+  - Resolved all GitHub CodeQL static analysis findings regarding cleartext local storage.
+  - Remediated high and moderate severity Dependabot vulnerabilities in transitive dependencies (`@grpc/grpc-js`, `minimatch`, `glob`, `rimraf`, `tar`) via explicit package lock overrides.
 - **Capacitor Navigation Security**:
   - Removed wildcard navigation (`*`) in `capacitor.config.json` and restricted WebView routing to explicit allowlisted application, Google OAuth, and Drive domains.
 - **Automated Regression Test Suite**:
-  - Added comprehensive automated test suite (`scripts/test-v209-integrity.cjs`) and bound it to `npm test`.
+  - Added comprehensive automated test suite (`scripts/test-v209-integrity.cjs`) covering 34 test scenarios (including 14 cryptographic tamper-detection, wrong-key, missing passphrase, and cross-device backup tests) and bound it to `npm test`.
   - Integrated automated linting and integrity testing into GitHub Actions (`.github/workflows/build-apk.yml`).
 
 ### Compatibility & Safety
