@@ -1073,6 +1073,12 @@ export const setRecoveryOnlyMode = (active: boolean): void => {
   }
 };
 
+const assertProductionWritesAllowed = (): void => {
+  if (isRecoveryOnlyMode()) {
+    throw new Error('CRITICAL: Data changes are blocked while LibTrack is in recovery-only mode. Resolve and verify the quarantined storage before resuming writes.');
+  }
+};
+
 export const ensureSafeProductionInit = (): SafeInitReport => {
   try {
     if (typeof window === 'undefined' || !window.localStorage) {
@@ -1475,6 +1481,7 @@ export const addStudentToFirestore = (
     note?: string;
   }
 ): Student => {
+  assertProductionWritesAllowed();
   if (isRecoveryOnlyMode()) {
     throw new Error('CRITICAL: Admissions are blocked while application is in recovery-only mode due to unresolved storage corruption.');
   }
@@ -1995,6 +2002,7 @@ export const updateStudentCheckIn = (
   timestamp?: string,
   verificationMethod: 'QR_SCAN' | 'MANUAL_DESK' = 'QR_SCAN'
 ): Student => {
+  assertProductionWritesAllowed();
   const allStudentsRaw = getAllStoredStudentsRaw();
   const index = allStudentsRaw.findIndex((s) => s.id === studentId && s.status !== 'archived');
   if (index === -1) {
@@ -2049,6 +2057,7 @@ export const toggleStudentAttendanceForDate = (
   dateStr: string,
   verificationMethod: 'QR_SCAN' | 'MANUAL_DESK' = 'MANUAL_DESK'
 ): { added: boolean; record?: DailyAttendanceRecord } => {
+  assertProductionWritesAllowed();
   const allStudentsRaw = getAllStoredStudentsRaw();
   const studentIndex = allStudentsRaw.findIndex((s) => s.id === studentId);
   if (studentIndex === -1) {
@@ -2111,6 +2120,7 @@ export const toggleStudentAttendanceForDate = (
  * Safely handles students both with and without payment records.
  */
 export const deleteStudentFromFirestore = (studentId: string): Student | null => {
+  assertProductionWritesAllowed();
   createAndVerifyPhase0LocalBackup(false);
   const nowISO = new Date().toISOString();
   const allStudentsRaw = getAllStoredStudentsRaw();
@@ -2169,6 +2179,7 @@ export const updateStudentInFirestore = (
   studentId: string,
   updates: Partial<Omit<Student, 'id'>>
 ): Student | null => {
+  assertProductionWritesAllowed();
   createAndVerifyPhase0LocalBackup(false);
   const nowISO = new Date().toISOString();
   const allStudentsRaw = getAllStoredStudentsRaw();
@@ -2226,6 +2237,7 @@ export const restoreArchivedStudentInFirestore = (
   studentId: string,
   reassignSeatNumber?: string
 ): Student | null => {
+  assertProductionWritesAllowed();
   const nowISO = new Date().toISOString();
   const allStudentsRaw = getAllStoredStudentsRaw();
   const targetIndex = allStudentsRaw.findIndex((s) => s.id === studentId);
@@ -2270,6 +2282,7 @@ export const hasPreviousSnapshot = (): boolean => {
 };
 
 export const resetFirestoreToDefaults = () => {
+  assertProductionWritesAllowed();
   // Always snapshot current state into Phase 0 backup vault before any reset
   createAndVerifyPhase0LocalBackup(true);
   try {
@@ -2283,6 +2296,7 @@ export const resetFirestoreToDefaults = () => {
 };
 
 export const restorePreviousOrSampleData = (): { count: number; source: 'backup' | 'sample' } => {
+  assertProductionWritesAllowed();
   resetFirestoreToDefaults();
   return { count: 0, source: 'sample' };
 };
@@ -2323,6 +2337,7 @@ export const importSyncedFirestoreSnapshot = (
   payments: Record<string, PaymentRecord[]>,
   dailyAttendance?: DailyAttendanceRecord[]
 ) => {
+  assertProductionWritesAllowed();
   isImportingRemoteSnapshot = true;
   try {
     // Ensure a verified local backup exists before applying any remote snapshot
