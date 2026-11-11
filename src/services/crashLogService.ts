@@ -1,5 +1,6 @@
 import { getDriveAccessToken, getGoogleDriveSyncConfig } from './googleDriveSyncService';
 import { uploadJsonToLogsFolder, CRASH_LOGS_FILENAME } from './driveLogsService';
+import { getSecureRandomHex } from '../utils/secureRandom';
 
 export interface BreadcrumbItem {
   timestamp: string;
@@ -145,7 +146,7 @@ export const logCrash = (
   const syncConfig = getGoogleDriveSyncConfig();
 
   const entry: CrashLogEntry = {
-    id: `crash_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    id: `crash_${Date.now()}_${getSecureRandomHex(5)}`,
     timestamp: new Date().toISOString(),
     type: options.type || (options.componentStack ? 'REACT_CRASH' : 'UNHANDLED_ERROR'),
     severity: options.severity || (options.componentStack ? 'CRITICAL' : 'ERROR'),

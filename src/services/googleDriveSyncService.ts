@@ -13,6 +13,7 @@ import {
   UserCredential,
 } from 'firebase/auth';
 import firebaseConfig from '../config/firebaseConfig';
+import { getSecureRandomHex } from '../utils/secureRandom';
 import {
   getStoredStudents,
   getAllStoredStudentsRaw,
@@ -376,7 +377,7 @@ export const getGoogleDriveSyncConfig = (): GoogleDriveSyncConfig => {
     const raw = localStorage.getItem(GDRIVE_SYNC_CONFIG_KEY);
     if (!raw) {
       const defaultConfig: GoogleDriveSyncConfig = {
-        deviceId: `dev_${Math.random().toString(36).substring(2, 9)}`,
+        deviceId: `dev_${getSecureRandomHex(7)}`,
         deviceName: 'Primary Library Phone',
         deviceRole: 'PRIMARY',
         autoDailySyncEnabled: true,

@@ -63,6 +63,10 @@ const {
 } = require('../src/services/storageService');
 const { addCustomShift, getStoredShifts } = require('../src/services/shiftService');
 const { addCustomSeat, getStoredSeats } = require('../src/services/seatService');
+const { setStaffPassphrase } = require('../src/services/storageEncryption');
+
+// Initialize in-memory vault for test suite execution
+setStaffPassphrase('test-passphrase-alpha-123');
 
 let testsPassed = 0;
 let testsFailed = 0;
@@ -398,10 +402,18 @@ runTest('addStudentToFirestore with invalid negative initial payment throws erro
 });
 
 // AES-GCM Cryptographic Tamper-Detection & Authentication Integrity
-console.log('Group 6: AES-256-GCM Cryptographic Tamper-Detection & Authentication Integrity (12 Scenarios)');
-const { encryptStoragePayload, decryptStoragePayload, StorageCryptoError, setStaffPassphrase } = require('../src/services/storageEncryption');
+console.log('Group 6: AES-256-GCM Cryptographic Tamper-Detection & Authentication Integrity (14 Scenarios)');
+const { encryptStoragePayload, decryptStoragePayload, StorageCryptoError, clearStaffPassphrase } = require('../src/services/storageEncryption');
+
+// Test missing passphrase fails closed
+runTest('0. Missing passphrase fails closed (no default passphrase exists)', () => {
+  clearStaffPassphrase();
+  assert.throws(() => encryptStoragePayload('test'), (err) => err && err.code === 'KEY_ERROR');
+  setStaffPassphrase('test-passphrase-alpha-123');
+});
 
 runTest('1. AES-GCM round trip success', () => {
+  setStaffPassphrase('test-passphrase-alpha-123');
   const plaintext = JSON.stringify({ student: 'Rahul Sharma', dues: 1200 });
   const ct = encryptStoragePayload(plaintext);
   assert.ok(ct.startsWith('AESGCM_GCM_V2:'));
@@ -410,6 +422,7 @@ runTest('1. AES-GCM round trip success', () => {
 });
 
 runTest('2. Ciphertext bit-flipping detection', () => {
+  setStaffPassphrase('test-passphrase-alpha-123');
   const ct = encryptStoragePayload('Secret records');
   const parts = ct.split(':');
   const tampered = `${parts[0]}:${parts[1]}:${parts[2].replace(/[0-9a-f]/g, 'f')}`;
@@ -417,6 +430,7 @@ runTest('2. Ciphertext bit-flipping detection', () => {
 });
 
 runTest('3. Authentication-tag modification detection', () => {
+  setStaffPassphrase('test-passphrase-alpha-123');
   const ct = encryptStoragePayload('Secret records');
   const parts = ct.split(':');
   const tamperedTag = parts[2].slice(0, -4) + '0000';
@@ -425,6 +439,7 @@ runTest('3. Authentication-tag modification detection', () => {
 });
 
 runTest('4. Nonce modification detection', () => {
+  setStaffPassphrase('test-passphrase-alpha-123');
   const ct = encryptStoragePayload('Secret records');
   const parts = ct.split(':');
   const badNonce = '00112233445566778899aabb';
@@ -438,7 +453,7 @@ runTest('5. Wrong-key decryption failure (fail closed)', () => {
   assert.throws(() => {
     decryptStoragePayload(ct, 'wrong-passphrase-beta-999');
   }, StorageCryptoError);
-  setStaffPassphrase('libtrack_v209_enterprise_staff_default_secure_passphrase_2026');
+  setStaffPassphrase('test-passphrase-alpha-123');
 });
 
 runTest('6. Truncated ciphertext detection', () => {
@@ -501,7 +516,7 @@ runTest('12. Cross-device backup encryption and decryption via shared passphrase
   const importedPt = decryptStoragePayload(exportedCt);
   assert.strictEqual(importedPt, backupData);
 
-  setStaffPassphrase('libtrack_v209_enterprise_staff_default_secure_passphrase_2026');
+  setStaffPassphrase('test-passphrase-alpha-123');
 });
 
 console.log('\n====================================================');

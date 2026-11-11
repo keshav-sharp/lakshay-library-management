@@ -1,5 +1,6 @@
 import { getGoogleDriveSyncConfig } from './googleDriveSyncService';
 import { getDriveAccessToken } from './googleDriveSyncService';
+import { getSecureRandomHex } from '../utils/secureRandom';
 import {
   uploadJsonToLogsFolder,
   downloadJsonFromLogsFolder,
@@ -67,7 +68,7 @@ export const getMyClientId = (): string => {
   try {
     let id = localStorage.getItem(MY_CLIENT_ID_KEY);
     if (!id) {
-      id = `client_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      id = `client_${Date.now()}_${getSecureRandomHex(5)}`;
       localStorage.setItem(MY_CLIENT_ID_KEY, id);
     }
     return id;

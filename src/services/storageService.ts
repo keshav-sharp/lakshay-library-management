@@ -1,5 +1,6 @@
 import { Student, PaymentRecord, DailyAttendanceRecord } from '../types/student';
 import { encryptStoragePayload, decryptStoragePayload } from './storageEncryption';
+import { getSecureRandomHex } from '../utils/secureRandom';
 import { 
   INITIAL_STUDENTS, 
   INITIAL_PAYMENT_HISTORY, 
@@ -1530,7 +1531,7 @@ export const addStudentToFirestore = (
     ...data,
     status: 'active',
     updatedAt: nowISO,
-    id: `std_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    id: `std_${Date.now()}_${getSecureRandomHex(5)}`,
   };
 
   const updated = [newStudent, ...allStudentsRaw];
@@ -1633,7 +1634,7 @@ export const getDeviceStableTag = (): string => {
     let tag = localStorage.getItem('libtrack_device_id_v1');
     if (!tag) {
       const rawClient = localStorage.getItem('lakshay_library_current_client_id_v1') || '';
-      const entropy = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const entropy = getSecureRandomHex(4).toUpperCase();
       tag = rawClient ? `D_${rawClient.slice(-4).toUpperCase()}` : `D_${entropy}`;
       localStorage.setItem('libtrack_device_id_v1', tag);
     }
@@ -1644,17 +1645,22 @@ export const getDeviceStableTag = (): string => {
 };
 
 /**
- * Standard RFC4122 v4 UUID generator with fallback.
+ * Standard RFC4122 v4 UUID generator with cryptographically secure fallback.
  */
 export const generateUUID = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(bytes);
+  } else {
+    throw new Error('Cryptographically secure random number generator (crypto.getRandomValues) is unavailable.');
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // RFC4122 v4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 };
 
 /**
@@ -1683,7 +1689,7 @@ export const generateCollisionResistantReceiptNumber = (prefix: 'REC' = 'REC'): 
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   const timeEntropy = (Date.now() % 100000).toString().padStart(5, '0');
-  const randomChars = Math.random().toString(36).substring(2, 6).toUpperCase();
+  const randomChars = getSecureRandomHex(4).toUpperCase();
   const devTag = getDeviceStableTag();
   return `${prefix}-${yyyy}${mm}${dd}-${devTag}-${timeEntropy}${randomChars}`;
 };
@@ -2431,7 +2437,7 @@ export const importSyncedFirestoreSnapshot = (
                 const rawQ = localStorage.getItem(QUARANTINED_PAYMENT_CONFLICTS_KEY);
                 const qList = rawQ ? JSON.parse(rawQ) : [];
                 qList.push({
-                  conflictId: `conf_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                  conflictId: `conf_${Date.now()}_${getSecureRandomHex(5)}`,
                   conflictType: 'RECEIPT_NUMBER_COLLISION',
                   detectedAtISO: new Date().toISOString(),
                   studentId,
@@ -2462,7 +2468,7 @@ export const importSyncedFirestoreSnapshot = (
                 const rawQ = localStorage.getItem(QUARANTINED_PAYMENT_CONFLICTS_KEY);
                 const qList = rawQ ? JSON.parse(rawQ) : [];
                 qList.push({
-                  conflictId: `conf_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                  conflictId: `conf_${Date.now()}_${getSecureRandomHex(5)}`,
                   conflictType: 'FINANCIAL_ATTRIBUTE_MISMATCH',
                   detectedAtISO: new Date().toISOString(),
                   studentId,

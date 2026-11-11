@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getSecureRandomHex } from '../utils/secureRandom';
 import { PaymentRecord, Student } from '../types/student';
 import { useTheme } from '../context/ThemeContext';
 import { markStudentPaidInFirestore, advanceDateByOneMonth, formatDueDateDisplay } from '../services/storageService';
@@ -39,13 +40,13 @@ export const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
 
   // Stable idempotency key per active payment attempt session
   const [idempotencyKey, setIdempotencyKey] = useState<string>(() =>
-    student ? `idemp_${student.id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}` : ''
+    student ? `idemp_${student.id}_${Date.now()}_${getSecureRandomHex(5)}` : ''
   );
 
   // Refresh idempotency key when student changes or modal re-opens
   React.useEffect(() => {
     if (student) {
-      setIdempotencyKey(`idemp_${student.id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
+      setIdempotencyKey(`idemp_${student.id}_${Date.now()}_${getSecureRandomHex(5)}`);
       setErrorMessage(null);
       setCustomAmount('');
       setTransactionId('');
@@ -100,7 +101,7 @@ export const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
 
         setIsProcessing(false);
         // Refresh idempotency key for next payment on same or another student
-        setIdempotencyKey(`idemp_${student.id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
+        setIdempotencyKey(`idemp_${student.id}_${Date.now()}_${getSecureRandomHex(5)}`);
         onClose();
         if (onPaymentSuccess) {
           onPaymentSuccess(newRecord, updatedStudent);
