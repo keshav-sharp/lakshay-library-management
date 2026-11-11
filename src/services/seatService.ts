@@ -1,3 +1,4 @@
+import { assertProductionWritesAllowed } from './storageService';
 export interface SeatItem {
   id: string;
   seatNumber: string; // e.g. "A-01"
@@ -69,6 +70,7 @@ export const getStoredSeats = (): SeatItem[] => {
 };
 
 export const saveStoredSeats = (seats: SeatItem[]) => {
+  assertProductionWritesAllowed();
   localStorage.setItem(SEATS_STORAGE_KEY, JSON.stringify(seats));
   notifySeatListeners();
 };
@@ -79,6 +81,7 @@ export const addCustomSeat = (
   customSection?: string,
   zoneLabel: string = 'Silent Reading Zone'
 ): SeatItem => {
+  assertProductionWritesAllowed();
   const seatNumber = rawSeatNumber.trim().toUpperCase();
   if (!seatNumber) {
     throw new Error('Seat number is required');
@@ -113,6 +116,7 @@ export const addNextSeatInSection = (
   section: string,
   zoneLabel: string = 'Silent Reading Zone'
 ): SeatItem => {
+  assertProductionWritesAllowed();
   const cleanSection = section.trim().toUpperCase();
   const seats = getStoredSeats();
   const sectionSeats = seats.filter((s) => s.section === cleanSection);
@@ -137,6 +141,7 @@ export const addSectionWithSeats = (
   count: number,
   zoneLabel: string = 'Silent Reading Zone'
 ): SeatItem[] => {
+  assertProductionWritesAllowed();
   const cleanSection = sectionName.trim().toUpperCase();
   if (!cleanSection || count <= 0) return [];
 
@@ -163,6 +168,7 @@ export const addSectionWithSeats = (
 
 // Remove a specific seat by seatNumber
 export const removeSeatByNumber = (seatNumber: string) => {
+  assertProductionWritesAllowed();
   const clean = seatNumber.trim().toUpperCase();
   const seats = getStoredSeats().filter((s) => s.seatNumber !== clean);
   saveStoredSeats(seats);
@@ -170,6 +176,7 @@ export const removeSeatByNumber = (seatNumber: string) => {
 
 // Reset seats to default 45 desks (Sections A, B, C)
 export const resetSeatsToDefaults = () => {
+  assertProductionWritesAllowed();
   saveStoredSeats(generateInitialSeats());
 };
 
