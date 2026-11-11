@@ -20,6 +20,7 @@ import {
   getStoredDailyAttendance,
   importSyncedFirestoreSnapshot,
   createAndVerifyPhase0LocalBackup,
+  isRecoveryOnlyMode,
 } from './storageService';
 import { getStoredShifts, saveStoredShifts } from './shiftService';
 import { getStoredSeats, saveStoredSeats } from './seatService';
@@ -612,6 +613,7 @@ let autoSyncTimeout: ReturnType<typeof setTimeout> | null = null;
 let isAutoSyncing = false;
 
 export const triggerLiveAutoSync = (delayMs: number = 800) => {
+  if (isRecoveryOnlyMode()) return;
   const config = getGoogleDriveSyncConfig();
   const token = getDriveAccessToken();
   if (!token || !config.autoDailySyncEnabled || config.deviceRole !== 'PRIMARY') {
@@ -778,6 +780,7 @@ export const applyMasterSyncPayloadLocally = (
   syncedAt: string;
   studentCount: number;
 } => {
+  if (isRecoveryOnlyMode()) throw new Error('Snapshot restore is blocked while recovery-only mode is active.');
   if (!payload?.data?.students || !Array.isArray(payload.data.students)) {
     throw new Error('Invalid master sync snapshot format.');
   }
@@ -1829,6 +1832,7 @@ export const pushPrimarySnapshotToGoogleDrive = async (
   studentCount: number;
   folderPath: string;
 }> => {
+  if (isRecoveryOnlyMode()) throw new Error('Google Drive upload is blocked while recovery-only mode is active.');
   createAndVerifyPhase0LocalBackup(false);
   const config = getGoogleDriveSyncConfig();
   if (config.deviceRole !== 'PRIMARY') {
@@ -1850,6 +1854,29 @@ export const pushPrimarySnapshotToGoogleDrive = async (
     const found = await findMasterSyncFileOnDrive(accessToken, null);
     if (found && !found.id.startsWith('LK-') && found.id !== 'LKSYNC1-OFFLINE') {
       targetFileId = found.id;
+    }
+  }
+
+  // Detect a remote snapshot newer than this device's last acknowledged sync.
+  // Google Drive v3 does not provide an atomic compare-and-swap for this JSON
+  // update flow, so this is a stale-write safety check, not a distributed lock.
+  if (targetFileId && config.lastSyncedAtISO) {
+    const metaRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${targetFileId}?supportsAllDrives=true&fields=id,modifiedTime`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!metaRes.ok) throw new Error(`Unable to verify remote snapshot revision (${metaRes.status}); upload cancelled to avoid overwriting unknown data.`);
+    const remoteMeta = await metaRes.json() as { modifiedTime?: string };
+    const remoteRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${targetFileId}?alt=media&supportsAllDrives=true`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!remoteRes.ok) throw new Error(`Unable to read current remote snapshot (${remoteRes.status}); upload cancelled.`);
+    const remotePayload = await remoteRes.json() as MasterSyncPayload;
+    const lastAcknowledged = Date.parse(config.lastSyncedAtISO);
+    const remoteSyncedAt = Date.parse(remotePayload?.syncedAt || remoteMeta.modifiedTime || '');
+    if (Number.isFinite(lastAcknowledged) && Number.isFinite(remoteSyncedAt) && remoteSyncedAt > lastAcknowledged) {
+      throw new Error('SYNC_CONFLICT: Google Drive contains a newer snapshot than this device last acknowledged. Pull and review the latest snapshot before uploading; no remote data was overwritten.');
     }
   }
 
