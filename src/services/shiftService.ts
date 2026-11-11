@@ -1,3 +1,4 @@
+import { assertProductionWritesAllowed } from './storageService';
 import { ShiftItem, INITIAL_SHIFTS } from '../types/shift';
 
 const SHIFTS_STORAGE_KEY = 'lakshay_app_shifts';
@@ -42,6 +43,7 @@ export const getStoredShifts = (): ShiftItem[] => {
 };
 
 export const addCustomShift = (shift: Omit<ShiftItem, 'id' | 'isSystem'>): ShiftItem => {
+  assertProductionWritesAllowed();
   const shifts = getStoredShifts();
   const newShift: ShiftItem = {
     ...shift,
@@ -55,6 +57,7 @@ export const addCustomShift = (shift: Omit<ShiftItem, 'id' | 'isSystem'>): Shift
 };
 
 export const updateShift = (id: string, updates: Partial<Omit<ShiftItem, 'id'>>): ShiftItem => {
+  assertProductionWritesAllowed();
   const shifts = getStoredShifts();
   const index = shifts.findIndex((s) => s.id === id);
   if (index === -1) throw new Error('Shift not found');
@@ -67,17 +70,20 @@ export const updateShift = (id: string, updates: Partial<Omit<ShiftItem, 'id'>>)
 };
 
 export const deleteShift = (id: string) => {
+  assertProductionWritesAllowed();
   const shifts = getStoredShifts().filter((s) => s.id !== id);
   localStorage.setItem(SHIFTS_STORAGE_KEY, JSON.stringify(shifts));
   notifyShiftListeners();
 };
 
 export const resetShiftsToDefaults = () => {
+  assertProductionWritesAllowed();
   localStorage.setItem(SHIFTS_STORAGE_KEY, JSON.stringify(INITIAL_SHIFTS));
   notifyShiftListeners();
 };
 
 export const saveStoredShifts = (shifts: ShiftItem[]) => {
+  assertProductionWritesAllowed();
   localStorage.setItem(SHIFTS_STORAGE_KEY, JSON.stringify(shifts));
   notifyShiftListeners();
 };
