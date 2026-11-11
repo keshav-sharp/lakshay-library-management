@@ -22,12 +22,12 @@ import { GITHUB_REPO_URL } from './NavigationDrawer';
 export interface HelpFaqModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialCategory?: 'SYNC' | 'UPI' | 'SEATS' | 'SHIFTS' | 'ATTENDANCE' | 'REMINDERS' | 'ALL';
+  initialCategory?: 'SYNC' | 'UPI' | 'SEATS' | 'SHIFTS' | 'RECEIPTS' | 'REMINDERS' | 'ALL';
 }
 
 interface FaqItem {
   id: string;
-  category: 'SYNC' | 'UPI' | 'SEATS' | 'SHIFTS' | 'ATTENDANCE' | 'REMINDERS';
+  category: 'SYNC' | 'UPI' | 'SEATS' | 'SHIFTS' | 'RECEIPTS' | 'REMINDERS';
   question: string;
   answer: string;
   highlights?: string[];
@@ -120,13 +120,25 @@ const FAQ_ITEMS: FaqItem[] = [
       'Open Menu $\\rightarrow$ "Shift Timings & Pricing". Here you can adjust standard library shifts (Morning 7AM-1PM, Evening 1PM-7PM, Full Day 7AM-10PM, Night Owl 10PM-6AM) and configure default monthly fees.',
   },
 
-  // ATTENDANCE
+  // RECEIPTS
   {
-    id: 'attendance-qr-checkin',
-    category: 'ATTENDANCE',
-    question: 'How does digital attendance check-in work?',
+    id: 'receipts-pdf-generation',
+    category: 'RECEIPTS',
+    question: 'How do PDF Fee Receipts work in Lakshay Library?',
     answer:
-      'Students can show their personalized Digital Desk Pass QR code (generated from their profile). Tap "Scan / QR Check-in" from the Menu or student card to scan with your phone camera. Attendance is recorded with a timestamp in the student’s monthly attendance calendar.',
+      'Every time you mark a student paid, the system automatically writes a verified ledger entry and generates an official, collision-resistant PDF fee receipt. Receipts can be downloaded offline or printed directly to desk printers with no internet connection required.',
+    highlights: [
+      '100% offline generation using client-side jsPDF rendering',
+      'Immutable snapshot of student name, seat number, and fee amounts',
+      'Download PDF, print directly, or share formatted text summaries over WhatsApp',
+    ],
+  },
+  {
+    id: 'receipts-manual-regeneration',
+    category: 'RECEIPTS',
+    question: 'Can I regenerate or re-download an older fee receipt?',
+    answer:
+      'Yes. Open the student’s profile from the dashboard, scroll down to Payment History, and tap the "Receipt" button next to any past payment. The receipt regenerates instantly with the exact historical receipt number, student name, and assigned seat.',
   },
 
   // REMINDERS
@@ -164,7 +176,7 @@ export const HelpFaqModal: React.FC<HelpFaqModalProps> = ({
     { id: 'UPI', label: 'UPI & Payments' },
     { id: 'SEATS', label: 'Seats & Desks' },
     { id: 'SHIFTS', label: 'Shifts & Fees' },
-    { id: 'ATTENDANCE', label: 'QR Attendance' },
+    { id: 'RECEIPTS', label: 'PDF Fee Receipts' },
     { id: 'REMINDERS', label: 'WhatsApp & Dues' },
   ];
 

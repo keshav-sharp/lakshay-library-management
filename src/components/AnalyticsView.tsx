@@ -1,7 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { Student, PaymentRecord } from '../types/student';
 import { ThemeColors } from '../types/theme';
-import { getDaysDifference, formatDueDateDisplay } from '../services/storageService';
+import {
+  getDaysDifference,
+  formatDueDateDisplay,
+  getAllStoredStudentsRaw,
+  getStoredDailyAttendance,
+  restoreArchivedStudentInFirestore,
+} from '../services/storageService';
 import { 
   AreaChart, 
   Area, 
@@ -52,10 +58,29 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   onRestorePreviousData,
 }) => {
   const [chartType, setChartType] = useState<'area' | 'bar'>('area');
+  const [archiveVersion, setArchiveVersion] = useState(0);
 
   const totalActualPaymentRecordsCount = useMemo(() => {
     return Object.values(allPayments).reduce((sum, records) => sum + (records?.length || 0), 0);
   }, [allPayments]);
+
+  const archivedStudentsWithHistory = useMemo(() => {
+    const rawAll = getAllStoredStudentsRaw();
+    const attendanceAll = getStoredDailyAttendance();
+    return rawAll
+      .filter((s) => s.status === 'archived')
+      .map((s) => {
+        const payments = allPayments[s.id] || [];
+        const totalPaid = payments.reduce((sum, p) => sum + (p.amountPaid || 0), 0);
+        const attendanceLogs = attendanceAll.filter((a) => a.studentId === s.id);
+        return {
+          student: s,
+          paymentsCount: payments.length,
+          totalPaid,
+          attendanceCount: attendanceLogs.length,
+        };
+      });
+  }, [allPayments, students, archiveVersion]);
 
   // Compute rolling 6 months based purely on real transactions
   const monthlyData = useMemo(() => {
@@ -217,10 +242,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     }));
   }, [students]);
 
-  // Recent 6 transactions flat list
+  // Recent 6 transactions flat list (including archived students so historical revenue is never lost)
   const recentTransactions = useMemo(() => {
     const list: { record: PaymentRecord; student?: Student }[] = [];
-    const studentMap = new Map(students.map((s) => [s.id, s]));
+    const allStudentsIncludingArchived = getAllStoredStudentsRaw();
+    const studentMap = new Map(allStudentsIncludingArchived.map((s) => [s.id, s]));
 
     Object.entries(allPayments).forEach(([studentId, records]) => {
       const s = studentMap.get(studentId);
@@ -232,10 +258,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     return list
       .sort((a, b) => new Date(b.record.paymentDate).getTime() - new Date(a.record.paymentDate).getTime())
       .slice(0, 6);
-  }, [allPayments, students]);
+  }, [allPayments, students, archiveVersion]);
 
-  // Empty State: When starting fresh with 0 students
-  if (students.length === 0) {
+  // Empty State: When starting fresh with 0 active students, 0 archived students, AND 0 historical payments
+  if (
+    students.length === 0 &&
+    archivedStudentsWithHistory.length === 0 &&
+    totalActualPaymentRecordsCount === 0
+  ) {
     return (
       <div className="bg-white rounded-3xl border border-slate-200/60 p-8 sm:p-12 text-center shadow-sm">
         <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl overflow-hidden border border-amber-200/60 shadow-md mx-auto mb-4">
@@ -695,23 +725,31 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               month: 'short',
               year: 'numeric'
             });
+            const displayName = record.studentName || student?.name || 'Archived Student';
+            const displaySeat = record.seatNumber || student?.seatNumber || student?.archivedSeatNumber;
+            const isArchived = !student || student.status === 'archived';
 
             return (
               <div 
                 key={record.id}
                 className="py-2.5 flex items-center justify-between gap-3 hover:bg-slate-50/60 px-2 rounded-xl transition-colors cursor-pointer"
-                onClick={() => student && onSelectStudent(student)}
+                onClick={() => student && !isArchived && onSelectStudent(student)}
               >
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
                     <ShieldCheck className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                      <span>{student?.name || 'Student'}</span>
-                      {student && (
+                    <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                      <span>{displayName}</span>
+                      {displaySeat && (
                         <span className="font-mono text-[10px] px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded">
-                          Seat {student.seatNumber}
+                          Seat {displaySeat}
+                        </span>
+                      )}
+                      {isArchived && (
+                        <span className="font-mono text-[10px] px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded">
+                          Archived Student
                         </span>
                       )}
                     </div>
@@ -732,6 +770,64 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           })}
         </div>
       </div>
+
+      {/* Archived Students & Preserved Historical Payment / Attendance Registry */}
+      {archivedStudentsWithHistory.length > 0 && (
+        <div className="bg-white p-4 sm:p-5 rounded-3xl border border-amber-200/80 shadow-xs space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-amber-600" />
+                <h4 className="text-sm font-bold text-slate-900">
+                  Archived Students &amp; Preserved Historical Records ({archivedStudentsWithHistory.length})
+                </h4>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Archived students release their seats immediately while their historical payments and attendance logs remain permanently intact.
+              </p>
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-100">
+            {archivedStudentsWithHistory.map(({ student: arch, paymentsCount, totalPaid, attendanceCount }) => (
+              <div
+                key={arch.id}
+                className="py-2.5 flex items-center justify-between gap-3 flex-wrap"
+              >
+                <div>
+                  <div className="text-xs font-bold text-slate-900 flex items-center gap-2 flex-wrap">
+                    <span>{arch.name}</span>
+                    <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+                      Archived {arch.archivedAt ? new Date(arch.archivedAt).toLocaleDateString('en-IN') : ''}
+                    </span>
+                    {arch.archivedSeatNumber && (
+                      <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                        Former Seat {arch.archivedSeatNumber} (Released)
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 font-mono">
+                    Preserved Payments: {paymentsCount} (₹{totalPaid.toLocaleString('en-IN')}) &bull; Archived Records Safe
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    restoreArchivedStudentInFirestore(arch.id);
+                    setArchiveVersion((v) => v + 1);
+                    onRestorePreviousData?.();
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-2xs transition-all"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Restore Student</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Monthly Analytics Email & Cloud Shared Report Card */}
       <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-5 rounded-3xl border border-amber-500/30 flex flex-col sm:flex-row items-center justify-between gap-4">

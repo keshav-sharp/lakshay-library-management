@@ -7,18 +7,14 @@ import { QRCodeSVG } from 'qrcode.react';
 import { 
   X, 
   QrCode, 
-  Download, 
   Share2, 
   Copy, 
   Check, 
   Clock, 
   Armchair, 
-  Calendar, 
   CheckCircle2, 
   AlertCircle, 
   AlertTriangle,
-  Scan,
-  Sparkles,
   BookOpen
 } from 'lucide-react';
 
@@ -27,7 +23,6 @@ interface StudentQrModalProps {
   isOpen: boolean;
   onClose: () => void;
   theme: ThemeColors;
-  onOpenScannerWithStudent?: (student: Student) => void;
 }
 
 export const StudentQrModal: React.FC<StudentQrModalProps> = ({
@@ -35,14 +30,13 @@ export const StudentQrModal: React.FC<StudentQrModalProps> = ({
   isOpen,
   onClose,
   theme,
-  onOpenScannerWithStudent,
 }) => {
   const { darkModeClass } = useTheme();
   const [copied, setCopied] = useState(false);
 
   if (!isOpen || !student) return null;
 
-  // Payload encoded in the QR code for instant parsing by library front-desk scanner
+  // Payload encoded in the QR code for student desk identification
   const qrPayload = JSON.stringify({
     app: 'lakshay_library',
     studentId: student.id,
@@ -64,7 +58,7 @@ export const StudentQrModal: React.FC<StudentQrModalProps> = ({
 
   const handleShareWhatsApp = () => {
     const cleanPhone = student.phoneNumber.replace(/[^0-9]/g, '');
-    const message = `Hello ${student.name}, here is your Lakshay Library Digital Desk Pass for Seat ${student.seatNumber} (${student.shiftTimings}). Please present your pass at the front-desk scanner for daily check-in. Student ID: ${student.id}`;
+    const message = `Hello ${student.name}, here is your Lakshay Library Digital Desk Pass for Seat ${student.seatNumber} (${student.shiftTimings}). Desk ID: ${student.id}`;
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
@@ -85,7 +79,7 @@ export const StudentQrModal: React.FC<StudentQrModalProps> = ({
                 Digital Library Desk Pass
               </h3>
               <p className="text-xs text-white/80">
-                Lakshay Library &bull; Quick QR Check-in
+                Lakshay Library &bull; Member Identification Pass
               </p>
             </div>
           </div>
@@ -143,9 +137,8 @@ export const StudentQrModal: React.FC<StudentQrModalProps> = ({
                   }}
                 />
               </div>
-              <span className="text-[11px] text-slate-400 font-mono mt-2 flex items-center gap-1">
-                <Scan className="w-3 h-3 text-amber-400" />
-                <span>Scan at Front Desk Scanner</span>
+              <span className="text-[11px] text-slate-400 font-mono mt-2">
+                Lakshay Member Desk QR
               </span>
             </div>
 
@@ -178,15 +171,6 @@ export const StudentQrModal: React.FC<StudentQrModalProps> = ({
                 )}
               </div>
             </div>
-
-            {student.lastCheckIn && (
-              <div className="mt-3 pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
-                <span>Last Check-in Recorded:</span>
-                <span className="font-mono text-emerald-400 font-semibold">
-                  {new Date(student.lastCheckIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
-            )}
           </div>
 
           {/* Quick action triggers */}
@@ -208,7 +192,7 @@ export const StudentQrModal: React.FC<StudentQrModalProps> = ({
               {copied ? (
                 <>
                   <Check className="w-4 h-4 text-emerald-600" />
-                  <span>Copied Token!</span>
+                  <span>Copied Pass!</span>
                 </>
               ) : (
                 <>
@@ -218,21 +202,6 @@ export const StudentQrModal: React.FC<StudentQrModalProps> = ({
               )}
             </button>
           </div>
-
-          {/* Test Check-in Scanner Button */}
-          {onOpenScannerWithStudent && (
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onOpenScannerWithStudent(student);
-              }}
-              className={`w-full p-3 rounded-2xl ${theme.primary} ${theme.primaryHover} text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all`}
-            >
-              <Scan className="w-4 h-4" />
-              <span>Simulate Desk Check-in Scan for {student.name.split(' ')[0]}</span>
-            </button>
-          )}
         </div>
       </div>
     </div>

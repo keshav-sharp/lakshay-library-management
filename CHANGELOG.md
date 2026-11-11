@@ -6,6 +6,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v2.0.8] - 2026-11-11 (PDF Fee Receipts, Attendance Interface Retirement & Financial Ledger Hardening)
+
+### Direct APK Download
+- 📦 **[Download `LakshayLibrary-v2.0.8.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**
+- 🔗 **[View Release Notes on GitHub (`v2.0.8`)](https://github.com/keshav-sharp/lakshay-library-management/releases/tag/v2.0.8)**
+
+### Added & Improved
+- **Professional Client-Side PDF Fee Receipts (`FeeReceiptModal`, `receiptPdfService`)**:
+  - Implemented 100% offline A4 PDF fee receipt generation using `jsPDF` (`^4.2.1`).
+  - Automated receipt generation immediately upon fee collection confirmation with festive visual feedback.
+  - Manual on-demand receipt regeneration from student payment history with stable receipt numbers.
+  - Features library branding, student snapshot, line-item fee breakdown, prominent total in Indian Rupees, amount in words (`amountToWordsINR`), terms note, and authorized seal box.
+  - Direct print support via hidden iframe without opening popups or navigating away.
+  - 1-click WhatsApp text receipt summary sharing.
+- **Library Profile & Receipt Customization (`SettingsModal`, `librarySettingsService`)**:
+  - Added configurable library name, address, contact phone, email, and receipt terms in Settings.
+  - Stored under `lakshay_library_profile_settings_v1` and protected across backup snapshots.
+- **Collision-Resistant Receipt Numbering**:
+  - Standardized receipt format to `REC-YYYYMMDD-<entropy><chars>` with deterministic recovery.
+- **Immutable Payment Snapshot Guarantee**:
+  - Point-in-time student name, seat assignment, and phone numbers are stamped directly on the `PaymentRecord`.
+  - Re-assigning a desk, editing a student profile, or archiving a student never alters past receipts.
+
+### Removed
+- **Student Attendance Active Feature Retirement**:
+  - Removed "Scan / QR Check-in" drawer menu item and obsolete `CheckInScannerModal`.
+  - Removed the monthly attendance calendar grid and daily log toggle buttons from `StudentDetailModal`.
+  - Removed check-in scan simulation buttons from `StudentQrModal`, repurposing it purely as a Member Desk Identification Pass.
+  - Replaced the "Attendance" FAQ category in `HelpFaqModal` with a dedicated "PDF Fee Receipts" guide.
+
+### Compatibility & Data Safety
+- **Zero Historical Data Loss**:
+  - Historical attendance records (`libtrack_firestore_daily_attendance`) and underlying types (`DailyAttendanceRecord`) are strictly preserved.
+  - Google Drive master sync payloads (`MasterSyncPayload`) and `LKSYNC1` offline packages maintain backward compatibility.
+- **Phase 1 IndexedDB Production Gate**:
+  - `PHASE1_PRODUCTION_AUTO_MIGRATION_ENABLED` remains locked at `false`.
+
+---
+
 ## [v2.0.7] - 2026-11-10 (Mobile Viewport Optimization, Dedicated Help & FAQ Center, Color Palette in Settings, Cross-Device UPI Sync & Security Policy)
 
 ### Direct APK Download

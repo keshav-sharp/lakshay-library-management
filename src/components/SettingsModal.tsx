@@ -14,6 +14,12 @@ import {
   Sliders,
 } from 'lucide-react';
 
+import {
+  getLibraryProfileSettings,
+  saveLibraryProfileSettings,
+  LibraryProfileSettings,
+} from '../services/librarySettingsService';
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -41,6 +47,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onResetDatabase,
 }) => {
   const { darkModeClass } = useTheme();
+  const [librarySettings, setLibrarySettings] = React.useState<LibraryProfileSettings>(
+    getLibraryProfileSettings()
+  );
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setLibrarySettings(getLibraryProfileSettings());
+    }
+  }, [isOpen]);
+
+  const handleUpdateSettings = (partial: Partial<LibraryProfileSettings>) => {
+    const updated = saveLibraryProfileSettings(partial);
+    setLibrarySettings(updated);
+  };
 
   if (!isOpen) return null;
 
@@ -223,7 +243,82 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
-          {/* 3. Library Configuration Shortcuts */}
+          {/* 3. Library Profile & Receipt Settings */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+              Library Profile &amp; Receipt Settings
+            </label>
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2.5">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Library Name
+                </label>
+                <input
+                  type="text"
+                  value={librarySettings.libraryName}
+                  onChange={(e) => handleUpdateSettings({ libraryName: e.target.value })}
+                  placeholder="Lakshay Library"
+                  className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-500 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Contact Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={librarySettings.contactPhone || ''}
+                    onChange={(e) => handleUpdateSettings({ contactPhone: e.target.value })}
+                    placeholder="+91 98765 43210"
+                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Email / Contact
+                  </label>
+                  <input
+                    type="text"
+                    value={librarySettings.contactEmail || ''}
+                    onChange={(e) => handleUpdateSettings({ contactEmail: e.target.value })}
+                    placeholder="desk@lakshaylibrary.in"
+                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Library Address
+                </label>
+                <input
+                  type="text"
+                  value={librarySettings.libraryAddress || ''}
+                  onChange={(e) => handleUpdateSettings({ libraryAddress: e.target.value })}
+                  placeholder="e.g. Near Metro Station, Main Road"
+                  className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Receipt Terms / Footer Note
+                </label>
+                <input
+                  type="text"
+                  value={librarySettings.termsAndConditions || ''}
+                  onChange={(e) => handleUpdateSettings({ termsAndConditions: e.target.value })}
+                  placeholder="Fees once paid are non-refundable & non-transferable."
+                  className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 4. Library Configuration Shortcuts */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
               Library Configuration

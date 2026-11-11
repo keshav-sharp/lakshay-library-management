@@ -221,94 +221,22 @@ export const sendPresenceHeartbeat = (): ActiveClientRecord[] => {
 };
 
 /**
- * Publishes this client's presence heartbeat to the shared Cloud Sync Relay channel
- * so Primary & Secondary devices can see each other's live session in real time across the internet.
+ * PHASE 0 SECURITY CONTAINMENT:
+ * Public `ntfy.sh` presence broadcasting has been permanently disabled to prevent
+ * device metadata and sync topic exposure on public unauthenticated channels.
+ * Presence is now exchanged strictly via local BroadcastChannel and authenticated Google Drive sync.
  */
 export const broadcastPresenceToCloudRelay = async (): Promise<void> => {
-  const syncConfig = getGoogleDriveSyncConfig();
-  const cleanId = (syncConfig.deviceId || 'default').replace(/[^a-zA-Z0-9]/g, '');
-  const topic = syncConfig.masterSyncChannelTopic || `lakshay_ch_${cleanId}`;
-  const presenceTopic = `${topic}_presence`;
-  const currentRecord = buildCurrentClientRecord();
-
-  try {
-    await fetch(`https://ntfy.sh/${presenceTopic}`, {
-      method: 'POST',
-      headers: {
-        'Title': 'Lakshay Presence Heartbeat',
-      },
-      body: JSON.stringify({
-        type: 'PRESENCE_HEARTBEAT',
-        client: currentRecord,
-      }),
-    });
-  } catch {
-    // Non-fatal background presence
-  }
+  return;
 };
 
 /**
- * Polls peer presence heartbeats from the Cloud Sync Relay channel.
+ * PHASE 0 SECURITY CONTAINMENT:
+ * Public `ntfy.sh` presence polling has been permanently disabled.
+ * Returns the locally stored active client registry (updated via BroadcastChannel & Google Drive).
  */
 export const fetchPeerPresenceFromCloudRelay = async (): Promise<ActiveClientRecord[]> => {
-  const syncConfig = getGoogleDriveSyncConfig();
-  const cleanId = (syncConfig.deviceId || 'default').replace(/[^a-zA-Z0-9]/g, '');
-  const topic = syncConfig.masterSyncChannelTopic || `lakshay_ch_${cleanId}`;
-  const presenceTopic = `${topic}_presence`;
-
-  try {
-    const res = await fetch(`https://ntfy.sh/${presenceTopic}/json?poll=1&since=10m`);
-    if (!res.ok) return getStoredActiveClients();
-    const text = (await res.text()).trim();
-    if (!text) return getStoredActiveClients();
-
-    const lines = text.split('\n').filter(Boolean);
-    const peerClientsMap = new Map<string, ActiveClientRecord>();
-
-    lines.forEach((line) => {
-      try {
-        const item = JSON.parse(line);
-        if (item.message) {
-          const parsed = JSON.parse(item.message);
-          if (parsed.type === 'PRESENCE_HEARTBEAT' && parsed.client) {
-            const c = parsed.client as ActiveClientRecord;
-            const existing = peerClientsMap.get(c.clientId);
-            if (!existing || c.lastActiveTimestamp > (existing.lastActiveTimestamp || 0)) {
-              peerClientsMap.set(c.clientId, c);
-            }
-          }
-        }
-      } catch {
-        // Ignore parsing errors
-      }
-    });
-
-    const myId = getMyClientId();
-    const current = getStoredActiveClients();
-    const localMap = new Map<string, ActiveClientRecord>();
-    current.forEach((c) => localMap.set(c.clientId, c));
-
-    peerClientsMap.forEach((peer, id) => {
-      if (id !== myId) {
-        localMap.set(id, { ...peer, isCurrentDevice: false });
-      }
-    });
-
-    const now = Date.now();
-    const merged = Array.from(localMap.values()).map((c) => {
-      if (c.clientId === myId) return buildCurrentClientRecord();
-      const diff = now - (c.lastActiveTimestamp || 0);
-      let status: ActiveClientRecord['status'] = 'ONLINE';
-      if (diff > IDLE_THRESHOLD_MS) status = 'OFFLINE';
-      else if (diff > ONLINE_THRESHOLD_MS) status = 'IDLE';
-      return { ...c, isCurrentDevice: false, status };
-    });
-
-    saveActiveClients(merged);
-    return merged;
-  } catch {
-    return getStoredActiveClients();
-  }
+  return getStoredActiveClients();
 };
 
 /**
@@ -400,21 +328,16 @@ export const syncActiveClientsWithGoogleDrive = async (
   return { activeCount: activeOnlineCount, clients: recentClients };
 };
 
-import { fetchPeerCrashLogsFromCloudRelay } from './crashLogService';
-
 /**
  * Initializes the client presence heartbeat engine:
  * - Listens on BroadcastChannel for other tabs on this machine
  * - Sends periodic heartbeats locally every 20 seconds
  * - Syncs with Google Drive every 60 seconds if access token is present
- * - Broadcasts and polls presence & crash logs via Cloud Relay every 15 seconds so Primary & Secondary devices see each other in real-time
+ * - (Phase 0 Security Containment: Public ntfy.sh relay broadcasting/polling disabled)
  */
 export const initClientPresenceEngine = (): (() => void) => {
-  // Initial local heartbeat and cloud relay sync
+  // Initial local heartbeat
   sendPresenceHeartbeat();
-  broadcastPresenceToCloudRelay().catch(() => {});
-  fetchPeerPresenceFromCloudRelay().catch(() => {});
-  fetchPeerCrashLogsFromCloudRelay().catch(() => {});
 
   // Listen for peer heartbeats via BroadcastChannel
   const handleBroadcastMessage = (event: MessageEvent) => {
@@ -441,23 +364,10 @@ export const initClientPresenceEngine = (): (() => void) => {
     sendPresenceHeartbeat();
   }, 20 * 1000);
 
-  // Periodic Cloud Relay presence exchange every 15 seconds
-  const cloudRelayInterval = setInterval(() => {
-    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
-      return; // Save resources when tab is backgrounded
-    }
-    broadcastPresenceToCloudRelay().catch(() => {});
-    fetchPeerPresenceFromCloudRelay().catch(() => {});
-    fetchPeerCrashLogsFromCloudRelay().catch(() => {});
-  }, 15 * 1000);
-
-  // Immediate presence broadcast when app tab or window gains focus / becomes active
+  // Immediate local presence refresh when app tab or window gains focus / becomes active
   const handleVisibilityOrFocus = () => {
     if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
       sendPresenceHeartbeat();
-      broadcastPresenceToCloudRelay().catch(() => {});
-      fetchPeerPresenceFromCloudRelay().catch(() => {});
-      fetchPeerCrashLogsFromCloudRelay().catch(() => {});
     }
   };
 
@@ -466,7 +376,7 @@ export const initClientPresenceEngine = (): (() => void) => {
     document.addEventListener('visibilitychange', handleVisibilityOrFocus);
   }
 
-  // Periodic Google Drive heartbeat sync every 60 seconds
+  // Periodic Google Drive heartbeat sync every 60 seconds when authenticated
   const driveSyncInterval = setInterval(() => {
     const token = getDriveAccessToken();
     if (token) {
@@ -485,7 +395,6 @@ export const initClientPresenceEngine = (): (() => void) => {
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
     }
     clearInterval(localHeartbeatInterval);
-    clearInterval(cloudRelayInterval);
     clearInterval(driveSyncInterval);
   };
 };

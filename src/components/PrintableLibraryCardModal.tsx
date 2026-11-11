@@ -178,7 +178,7 @@ export const PrintableLibraryCardModal: React.FC<PrintableLibraryCardModalProps>
                 </div>
                 <span className="text-[10px] text-slate-500 font-mono mt-1.5 flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                  <span>Scan for Digital Desk Check-in</span>
+                  <span>Student Desk Identification Pass</span>
                 </span>
               </div>
 

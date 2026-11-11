@@ -1,5 +1,11 @@
 import { Student, PaymentRecord } from '../types/student';
-import { getDaysDifference, formatDueDateDisplay } from './storageService';
+import {
+  getDaysDifference,
+  formatDueDateDisplay,
+  getAllStoredStudentsRaw,
+  getStoredPayments,
+  getStoredDailyAttendance,
+} from './storageService';
 
 export interface DailyBackupRecord {
   id: string;
@@ -82,19 +88,44 @@ export const buildFirestoreJsonSnapshot = (
 ): { jsonString: string; paymentCount: number } => {
   let paymentCount = 0;
 
-  const enrichedStudents = students.map((student) => {
-    const paymentHistory = allPayments[student.id] || [];
+  // Merge active students passed in with all stored students (active + archived) so daily backups never drop archived records
+  const allStoredStudents = getAllStoredStudentsRaw();
+  const byId = new Map<string, Student>();
+  for (const s of allStoredStudents) {
+    if (s && s.id) byId.set(s.id, s);
+  }
+  for (const s of students || []) {
+    if (s && s.id) byId.set(s.id, s);
+  }
+  const combinedStudents = Array.from(byId.values());
+
+  const storedPayments = getStoredPayments();
+  const combinedPayments: Record<string, PaymentRecord[]> = {
+    ...storedPayments,
+    ...allPayments,
+  };
+
+  const enrichedStudents = combinedStudents.map((student) => {
+    const paymentHistory = combinedPayments[student.id] || [];
     paymentCount += paymentHistory.length;
     const diffDays = getDaysDifference(student.nextFeeDueDate);
 
     return {
       ...student,
       computedFeeStatus:
-        diffDays < 0 ? 'OVERDUE' : diffDays <= 3 ? 'DUE_SOON' : 'UPCOMING_PAID',
+        student.status === 'archived'
+          ? 'ARCHIVED'
+          : diffDays < 0
+          ? 'OVERDUE'
+          : diffDays <= 3
+          ? 'DUE_SOON'
+          : 'UPCOMING_PAID',
       daysUntilOrPastDue: diffDays,
       PaymentHistory: paymentHistory,
     };
   });
+
+  const dailyAttendance = getStoredDailyAttendance();
 
   const payload = {
     schemaVersion: '1.0',
@@ -102,12 +133,17 @@ export const buildFirestoreJsonSnapshot = (
     workerClass: 'com.example.librarymanagement.worker.DailyDatabaseBackupWorker',
     exportedAt: new Date().toISOString(),
     summary: {
-      totalStudents: students.length,
+      totalStudents: combinedStudents.length,
+      activeStudents: combinedStudents.filter((s) => s.status !== 'archived').length,
+      archivedStudents: combinedStudents.filter((s) => s.status === 'archived').length,
       totalPaymentRecords: paymentCount,
-      totalMonthlyRevenueINR: students.reduce((acc, s) => acc + s.monthlyFee, 0),
+      totalMonthlyRevenueINR: combinedStudents
+        .filter((s) => s.status !== 'archived')
+        .reduce((acc, s) => acc + s.monthlyFee, 0),
     },
     firestoreCollections: {
       students: enrichedStudents,
+      dailyAttendance,
     },
   };
 

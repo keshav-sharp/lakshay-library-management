@@ -109,106 +109,26 @@ export const clearCrashLogs = () => {
 };
 
 /**
- * Publishes a crash log to the live Cloud Relay topic (${topic}_logs)
- * so Secondary device errors are transmitted to Primary in real time.
+ * PHASE 0 SECURITY CONTAINMENT:
+ * Public `ntfy.sh` crash log broadcasting has been permanently disabled to prevent
+ * diagnostic stack traces, URLs, and breadcrumbs from being exposed on public topics.
+ * Crash logs are stored locally and synced exclusively via authenticated Google Drive.
  */
-export const broadcastCrashLogToCloudRelay = async (entry: CrashLogEntry): Promise<void> => {
-  const syncConfig = getGoogleDriveSyncConfig();
-  const cleanId = (syncConfig.deviceId || 'default').replace(/[^a-zA-Z0-9]/g, '');
-  const topic = syncConfig.masterSyncChannelTopic || `lakshay_ch_${cleanId}`;
-  const logsTopic = `${topic}_logs`;
-
-  try {
-    await fetch(`https://ntfy.sh/${logsTopic}`, {
-      method: 'POST',
-      headers: {
-        'Title': `Lakshay ${syncConfig.deviceRole || 'DEVICE'} Log: ${entry.severity}`,
-        'Priority': entry.severity === 'CRITICAL' ? '4' : '3',
-      },
-      body: JSON.stringify({
-        type: 'CRASH_LOG',
-        deviceId: syncConfig.deviceId,
-        deviceName: syncConfig.deviceName,
-        deviceRole: syncConfig.deviceRole,
-        entry: {
-          ...entry,
-          originDeviceId: syncConfig.deviceId,
-          originDeviceName: syncConfig.deviceName,
-          originDeviceRole: syncConfig.deviceRole,
-        },
-      }),
-    });
-  } catch {
-    // Non-fatal background log broadcast
-  }
+export const broadcastCrashLogToCloudRelay = async (_entry: CrashLogEntry): Promise<void> => {
+  return;
 };
 
 /**
- * Polls peer crash & error logs from the Cloud Sync Relay channel
- * to capture Secondary device errors on Primary without requiring Google Drive auth on Secondary.
+ * PHASE 0 SECURITY CONTAINMENT:
+ * Public `ntfy.sh` crash log polling has been permanently disabled.
+ * Returns locally stored crash logs.
  */
 export const fetchPeerCrashLogsFromCloudRelay = async (): Promise<CrashLogEntry[]> => {
-  const syncConfig = getGoogleDriveSyncConfig();
-  const cleanId = (syncConfig.deviceId || 'default').replace(/[^a-zA-Z0-9]/g, '');
-  const topic = syncConfig.masterSyncChannelTopic || `lakshay_ch_${cleanId}`;
-  const logsTopic = `${topic}_logs`;
-
-  try {
-    const res = await fetch(`https://ntfy.sh/${logsTopic}/json?poll=1&since=24h`);
-    if (!res.ok) return getCrashLogs();
-    const text = (await res.text()).trim();
-    if (!text) return getCrashLogs();
-
-    const lines = text.split('\n').filter(Boolean);
-    const existing = getCrashLogs();
-    const existingIds = new Set(existing.map((l) => l.id));
-    const newLogs: CrashLogEntry[] = [];
-
-    lines.forEach((line) => {
-      try {
-        const item = JSON.parse(line);
-        if (item.message) {
-          const parsed = JSON.parse(item.message);
-          if (parsed.type === 'CRASH_LOG' && parsed.entry && !existingIds.has(parsed.entry.id)) {
-            existingIds.add(parsed.entry.id);
-            const devLabel = `[${parsed.deviceRole || 'DEVICE'}: ${parsed.deviceName || 'Secondary'}]`;
-            const formattedMessage = parsed.entry.message.startsWith('[')
-              ? parsed.entry.message
-              : `${devLabel} ${parsed.entry.message}`;
-
-            const remoteEntry: CrashLogEntry = {
-              ...parsed.entry,
-              message: formattedMessage,
-              originDeviceId: parsed.deviceId,
-              originDeviceName: parsed.deviceName,
-              originDeviceRole: parsed.deviceRole,
-            };
-            newLogs.push(remoteEntry);
-          }
-        }
-      } catch {
-        // Ignore parse error
-      }
-    });
-
-    if (newLogs.length > 0) {
-      const merged = [...newLogs, ...existing].slice(0, MAX_LOGS);
-      try {
-        localStorage.setItem(CRASH_LOGS_STORAGE_KEY, JSON.stringify(merged));
-      } catch {
-        // Ignore
-      }
-      notifyListeners(merged);
-      return merged;
-    }
-    return existing;
-  } catch {
-    return getCrashLogs();
-  }
+  return getCrashLogs();
 };
 
 /**
- * Logs a crash, error, or unhandled rejection, saves to localStorage, and auto-pushes to Google Drive & Cloud Relay.
+ * Logs a crash, error, or unhandled rejection, saves to localStorage, and auto-pushes to authenticated Google Drive.
  */
 export const logCrash = (
   error: Error | string,
@@ -253,10 +173,7 @@ export const logCrash = (
 
   notifyListeners(updated);
 
-  // Auto-broadcast log to Cloud Relay topic immediately so Secondary device logs reach Primary right away
-  broadcastCrashLogToCloudRelay(entry).catch(() => {});
-
-  // Auto-push to Google Drive `Lakshay_Library_Logs` folder if access token is available
+  // Auto-push to Google Drive `Lakshay_Library_Logs` folder if authenticated OAuth access token is available
   const token = getDriveAccessToken();
   if (token) {
     syncCrashLogsToGoogleDrive(token).catch(() => {

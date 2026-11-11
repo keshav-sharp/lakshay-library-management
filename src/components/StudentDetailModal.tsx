@@ -1,12 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Student, DailyAttendanceRecord } from '../types/student';
+import React, { useState, useEffect } from 'react';
+import { Student, PaymentRecord } from '../types/student';
 import { useTheme } from '../context/ThemeContext';
 import { 
   getStudentPaymentHistory, 
-  getStudentDailyAttendance,
-  toggleStudentAttendanceForDate,
-  updateStudentCheckIn,
-  subscribeToFirestore,
+  subscribeToFirestore, 
   formatDueDateDisplay, 
   getDaysDifference 
 } from '../services/storageService';
@@ -30,10 +27,9 @@ import {
   Banknote,
   QrCode,
   Printer,
-  CalendarCheck,
-  Scan,
   Sparkles,
-  UserCheck
+  Download,
+  FileText
 } from 'lucide-react';
 import { KOTLIN_CODE_SNIPPETS } from '../data/kotlinCodeSnippets';
 
@@ -45,9 +41,8 @@ interface StudentDetailModalProps {
   onWhatsAppClick: (student: Student) => void;
   onQrCodeClick?: (student: Student) => void;
   onPrintCardClick?: (student: Student) => void;
+  onOpenReceipt?: (record: PaymentRecord, student: Student) => void;
 }
-
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   student,
@@ -57,12 +52,12 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   onWhatsAppClick,
   onQrCodeClick,
   onPrintCardClick,
+  onOpenReceipt,
 }) => {
   const { darkModeClass } = useTheme();
   const [activeTab, setActiveTab] = useState<'details' | 'kotlin_code'>('details');
   const [copiedCode, setCopiedCode] = useState(false);
-  const [refreshTick, setRefreshTick] = useState(0);
-  const [selectedDayStr, setSelectedDayStr] = useState<string | null>(null);
+  const [, setRefreshTick] = useState(0);
 
   useEffect(() => {
     const unsub = subscribeToFirestore(() => {
@@ -71,85 +66,10 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     return unsub;
   }, []);
 
-  // Reset selected day when student changes
-  useEffect(() => {
-    if (student) {
-      const now = new Date();
-      const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      setSelectedDayStr(todayKey);
-    }
-  }, [student?.id]);
-
-  // Current month calendar computation
-  const calendarInfo = useMemo(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth(); // 0-indexed
-    const todayDate = now.getDate();
-    const todayKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(todayDate).padStart(2, '0')}`;
-
-    const monthName = now.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-    const firstDayOfWeek = new Date(year, month, 1).getDay(); // 0 (Sun) - 6 (Sat)
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-    const cells: Array<{
-      day: number | null;
-      dateStr: string | null;
-      isToday: boolean;
-      isPast: boolean;
-      isFuture: boolean;
-    }> = [];
-
-    for (let i = 0; i < firstDayOfWeek; i++) {
-      cells.push({ day: null, dateStr: null, isToday: false, isPast: false, isFuture: false });
-    }
-
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      cells.push({
-        day: d,
-        dateStr,
-        isToday: d === todayDate,
-        isPast: d < todayDate,
-        isFuture: d > todayDate,
-      });
-    }
-
-    return {
-      year,
-      month,
-      todayDate,
-      todayKey,
-      monthName,
-      daysInMonth,
-      cells,
-    };
-  }, [refreshTick]);
-
   if (!isOpen || !student) return null;
 
   const paymentHistory = getStudentPaymentHistory(student.id);
   const totalAmountPaid = paymentHistory.reduce((sum, p) => sum + p.amountPaid, 0);
-
-  // Fetch student's DailyAttendance records from Firestore
-  const allAttendanceLogs = getStudentDailyAttendance(student.id);
-
-  // Filter logs belonging to the current month
-  const currentMonthPrefix = `${calendarInfo.year}-${String(calendarInfo.month + 1).padStart(2, '0')}-`;
-  const currentMonthLogs = allAttendanceLogs.filter((rec) => rec.date.startsWith(currentMonthPrefix));
-
-  // Map by YYYY-MM-DD for O(1) lookup in the calendar view
-  const attendanceByDate = new Map<string, DailyAttendanceRecord>();
-  currentMonthLogs.forEach((rec) => {
-    attendanceByDate.set(rec.date, rec);
-  });
-
-  const daysPresentCount = attendanceByDate.size;
-  const elapsedDaysInMonth = Math.max(1, calendarInfo.todayDate);
-  const attendancePercentage = Math.min(100, Math.round((daysPresentCount / elapsedDaysInMonth) * 100));
-  const isCheckedInToday = attendanceByDate.has(calendarInfo.todayKey);
-
-  const selectedDayRecord = selectedDayStr ? attendanceByDate.get(selectedDayStr) : undefined;
 
   const diffDays = getDaysDifference(student.nextFeeDueDate);
   const isOverdue = diffDays < 0;
@@ -165,16 +85,6 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
       setCopiedCode(true);
       setTimeout(() => setCopiedCode(false), 2000);
     }
-  };
-
-  const handleCheckInToday = () => {
-    updateStudentCheckIn(student.id, undefined, 'QR_SCAN');
-    setSelectedDayStr(calendarInfo.todayKey);
-  };
-
-  const handleToggleDateAttendance = (dateStr: string) => {
-    toggleStudentAttendanceForDate(student.id, dateStr, 'MANUAL_DESK');
-    setSelectedDayStr(dateStr);
   };
 
   const getModeIcon = (mode: string) => {
@@ -230,82 +140,110 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
           </button>
         </div>
 
+        {/* Tab switch bar: Details vs Kotlin Code */}
+        <div className="px-4 sm:px-6 pt-2 pb-0 bg-slate-50 border-b border-slate-200/60 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('details')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-t-xl transition-all border-b-2 flex items-center gap-1.5 ${
+                activeTab === 'details'
+                  ? 'text-amber-700 border-amber-600 bg-white shadow-2xs'
+                  : 'text-slate-500 border-transparent hover:text-slate-800'
+              }`}
+            >
+              <Receipt className="w-3.5 h-3.5" />
+              <span>Student &amp; Fee Ledger</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('kotlin_code')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-t-xl transition-all border-b-2 flex items-center gap-1.5 ${
+                activeTab === 'kotlin_code'
+                  ? 'text-amber-700 border-amber-600 bg-white shadow-2xs'
+                  : 'text-slate-500 border-transparent hover:text-slate-800'
+              }`}
+            >
+              <Code2 className="w-3.5 h-3.5" />
+              <span>Android Compose Code</span>
+            </button>
+          </div>
+
+          <span className="text-[10px] font-mono text-slate-400 hidden sm:inline">
+            ID: {student.id.slice(-8).toUpperCase()}
+          </span>
+        </div>
+
         {activeTab === 'details' ? (
-          <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 space-y-5 min-w-0 max-w-full">
-            {/* Core Info Summary Card */}
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div>
-                  <span className="text-slate-400 block mb-0.5">Shift Timing</span>
-                  <div className="flex items-center gap-1 font-semibold text-slate-800">
-                    <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                    <span className="truncate">{student.shiftTimings}</span>
-                  </div>
-                </div>
-
-                <div>
-                  <span className="text-slate-400 block mb-0.5">Monthly Fee</span>
-                  <div className="flex items-center gap-0.5 font-bold text-slate-900 text-sm">
-                    <IndianRupee className="w-3.5 h-3.5 text-slate-600" />
-                    <span>₹{student.monthlyFee.toLocaleString('en-IN')}</span>
-                  </div>
-                </div>
-
-                <div>
-                  <span className="text-slate-400 block mb-0.5">Next Due Date</span>
-                  <div className="flex items-center gap-1 font-semibold text-slate-900">
-                    <Calendar className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                    <span>{formatDueDateDisplay(student.nextFeeDueDate)}</span>
-                  </div>
-                </div>
-
-                <div>
-                  <span className="text-slate-400 block mb-0.5">Fee Status</span>
-                  {isOverdue ? (
-                    <span className="inline-flex items-center gap-1 text-rose-700 font-bold">
-                      <AlertCircle className="w-3.5 h-3.5 text-rose-500" />
-                      {Math.abs(diffDays)}d Overdue
-                    </span>
-                  ) : isDueSoon ? (
-                    <span className="inline-flex items-center gap-1 text-amber-700 font-bold">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                      Due in {diffDays}d
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-emerald-700 font-bold">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                      Active (Paid)
-                    </span>
-                  )}
-                </div>
+          <div className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 flex-1 min-w-0">
+            {/* Quick Status Pill Bar */}
+            <div className="flex items-center justify-between flex-wrap gap-2 p-3 rounded-2xl bg-slate-50 border border-slate-200/70 text-xs">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+                <span className="text-slate-600 font-medium">Shift:</span>
+                <span className="font-semibold text-slate-900">{student.shiftTimings}</span>
               </div>
 
-              {student.notes && (
-                <div className="mt-3 pt-3 border-t border-slate-200/60 text-xs text-slate-600">
-                  <span className="font-semibold text-slate-700">Student Note: </span>
-                  {student.notes}
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                <span className="text-slate-600 font-medium">Status:</span>
+                {isOverdue ? (
+                  <span className="px-2 py-0.5 rounded-full font-bold bg-rose-100 text-rose-700 flex items-center gap-1 text-[11px]">
+                    <AlertCircle className="w-3 h-3" />
+                    Overdue ({Math.abs(diffDays)}d)
+                  </span>
+                ) : isDueSoon ? (
+                  <span className="px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800 flex items-center gap-1 text-[11px]">
+                    <AlertTriangle className="w-3 h-3" />
+                    Due in {diffDays}d
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1 text-[11px]">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Active (Paid)
+                  </span>
+                )}
+              </div>
             </div>
 
-            {/* Quick Actions Bar */}
-            <div className="flex items-center justify-between flex-wrap gap-3 bg-amber-50/60 p-3 rounded-2xl border border-amber-200/70">
-              <div className="text-xs text-amber-950">
-                <span className="font-bold">Total Paid: </span>
-                <span className="font-mono font-bold text-amber-800">₹{totalAmountPaid.toLocaleString('en-IN')}</span>
-                <span className="text-slate-400 mx-1.5">&bull;</span>
-                <span>{paymentHistory.length} payments</span>
+            {/* Fee Overview Card */}
+            <div className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent rounded-2xl border border-amber-200/70 p-4 sm:p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-800">
+                  Fee Subscription Summary
+                </span>
+                <span className="text-xs font-mono text-slate-500">
+                  Total Paid: ₹{totalAmountPaid.toLocaleString('en-IN')}
+                </span>
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                <div className="p-3 bg-white/80 rounded-xl border border-amber-200/50">
+                  <span className="text-[11px] text-slate-500 block">Monthly Rate</span>
+                  <span className="text-base sm:text-lg font-bold font-mono text-slate-900">
+                    ₹{student.monthlyFee.toLocaleString('en-IN')}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-white/80 rounded-xl border border-amber-200/50">
+                  <span className="text-[11px] text-slate-500 block">Next Due Date</span>
+                  <span className={`text-base sm:text-lg font-bold font-mono ${isOverdue ? 'text-rose-600' : isDueSoon ? 'text-amber-700' : 'text-slate-900'}`}>
+                    {formatDueDateDisplay(student.nextFeeDueDate)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons Row */}
+              <div className="pt-2 flex items-center justify-end gap-2 flex-wrap">
                 {onQrCodeClick && (
                   <button
                     type="button"
                     onClick={() => onQrCodeClick(student)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all shadow-2xs"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all shadow-2xs"
+                    title="Desk Pass"
                   >
-                    <QrCode className="w-3.5 h-3.5 text-slate-600" />
-                    <span>Desk QR Pass</span>
+                    <QrCode className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Desk Pass</span>
                   </button>
                 )}
 
@@ -313,9 +251,10 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                   <button
                     type="button"
                     onClick={() => onPrintCardClick(student)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all shadow-2xs"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all shadow-2xs"
+                    title="Print Desk Card"
                   >
-                    <Printer className="w-3.5 h-3.5 text-slate-600" />
+                    <Printer className="w-3.5 h-3.5 text-slate-500" />
                     <span>Print Badge</span>
                   </button>
                 )}
@@ -340,234 +279,18 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
               </div>
             </div>
 
-            {/* ================================================================= */}
-            {/* NEW: 'Daily Attendance' Firestore Collection & Monthly Calendar   */}
-            {/* ================================================================= */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <CalendarCheck className="w-4 h-4 text-emerald-600" />
-                    <h3 className="text-sm font-bold text-slate-900">
-                      Daily Attendance &bull; {calendarInfo.monthName}
-                    </h3>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Monthly check-in history and attendance calendar
-                  </p>
-                </div>
-
-                {/* Check-in Today quick button */}
-                {!isCheckedInToday ? (
-                  <button
-                    type="button"
-                    onClick={handleCheckInToday}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-all active:scale-95"
-                  >
-                    <UserCheck className="w-3.5 h-3.5" />
-                    <span>Log Today&apos;s Check-in</span>
-                  </button>
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    Checked in Today
-                  </span>
-                )}
-              </div>
-
-              {/* Monthly Attendance Summary KPIs */}
-              <div className="grid grid-cols-3 gap-2.5 bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs">
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Days Present</span>
-                  <span className="text-sm font-bold text-emerald-700">
-                    {daysPresentCount} <span className="text-xs font-normal text-slate-500">/ {calendarInfo.daysInMonth} days</span>
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Monthly Consistency</span>
-                  <span className="text-sm font-bold text-slate-900">
-                    {attendancePercentage}% <span className="text-[11px] font-normal text-slate-500">(up to today)</span>
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Latest Check-in</span>
-                  <span className="text-xs font-mono font-semibold text-slate-800">
-                    {currentMonthLogs[0]
-                      ? new Date(currentMonthLogs[0].checkInTime).toLocaleTimeString('en-IN', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : 'No logs'}
-                  </span>
-                </div>
-              </div>
-
-              {/* 7-Column Calendar Grid for Current Month */}
-              <div>
-                <div className="grid grid-cols-7 gap-1.5 text-center mb-1.5">
-                  {WEEKDAYS.map((dayName) => (
-                    <div key={dayName} className="text-[11px] font-bold text-slate-400 uppercase tracking-wider py-1">
-                      {dayName}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-7 gap-1.5">
-                  {calendarInfo.cells.map((cell, idx) => {
-                    if (!cell.day || !cell.dateStr) {
-                      return <div key={`empty_${idx}`} className="h-12 rounded-xl bg-slate-50/40" />;
-                    }
-
-                    const record = attendanceByDate.get(cell.dateStr);
-                    const isPresent = !!record;
-                    const isSelected = selectedDayStr === cell.dateStr;
-
-                    const checkInShortTime = record
-                      ? new Date(record.checkInTime).toLocaleTimeString('en-IN', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          hour12: false,
-                        })
-                      : null;
-
-                    let cellStyle = 'bg-white border-slate-200 text-slate-700 hover:border-slate-300';
-                    if (isPresent) {
-                      cellStyle = 'bg-emerald-50/90 border-emerald-300 text-emerald-950 hover:bg-emerald-100/80';
-                    } else if (cell.isPast) {
-                      cellStyle = 'bg-rose-50/40 border-rose-200/60 text-slate-400 hover:bg-rose-50';
-                    } else if (cell.isFuture) {
-                      cellStyle = 'bg-slate-50/70 border-slate-100 text-slate-400';
-                    }
-
-                    return (
-                      <button
-                        key={cell.dateStr}
-                        type="button"
-                        onClick={() => setSelectedDayStr(cell.dateStr)}
-                        className={`h-12 rounded-xl border p-1 flex flex-col items-center justify-between transition-all relative ${cellStyle} ${
-                          cell.isToday ? 'ring-2 ring-amber-500 ring-offset-1' : ''
-                        } ${isSelected ? 'shadow-sm ring-2 ring-slate-900' : ''}`}
-                        title={
-                          isPresent
-                            ? `Checked in on ${cell.dateStr} at ${checkInShortTime} (${record.verificationMethod})`
-                            : `No check-in logged on ${cell.dateStr}`
-                        }
-                      >
-                        <div className="w-full flex items-center justify-between px-1">
-                          <span className={`text-xs font-bold ${cell.isToday ? 'text-amber-700' : ''}`}>
-                            {cell.day}
-                          </span>
-                          {isPresent ? (
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                          ) : cell.isPast ? (
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-300 shrink-0" />
-                          ) : null}
-                        </div>
-
-                        {isPresent ? (
-                          <span className="text-[10px] font-mono font-semibold text-emerald-700 tracking-tighter">
-                            {checkInShortTime}
-                          </span>
-                        ) : (
-                          <span className="text-[9px] text-slate-400">
-                            {cell.isToday ? 'Today' : cell.isPast ? 'Absent' : '—'}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Legend */}
-                <div className="flex items-center justify-between flex-wrap gap-2 mt-3 pt-2 border-t border-slate-100 text-[11px] text-slate-500">
-                  <div className="flex items-center gap-3">
-                    <span className="flex items-center gap-1">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
-                      Present (Checked-in)
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="w-2.5 h-2.5 rounded-full bg-rose-300 inline-block" />
-                      Absent
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="w-2.5 h-2.5 rounded-full border-2 border-amber-500 inline-block" />
-                      Today
-                    </span>
-                  </div>
-                  <span className="text-slate-400">Click any date to inspect or toggle log</span>
-                </div>
-              </div>
-
-              {/* Selected Date Attendance Log Inspector Bar */}
-              {selectedDayStr && (
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3 text-xs">
-                  {selectedDayRecord ? (
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                        <Scan className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="font-bold text-slate-900 flex items-center gap-2">
-                          <span>{formatDueDateDisplay(selectedDayStr)} &bull; Present</span>
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                            {selectedDayRecord.verificationMethod === 'QR_SCAN' ? 'QR Scan' : 'Manual Desk'}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500">
-                          Checked in at{' '}
-                          <strong className="text-slate-700">
-                            {new Date(selectedDayRecord.checkInTime).toLocaleTimeString('en-IN', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              second: '2-digit',
-                            })}
-                          </strong>{' '}
-                          &bull; Seat {selectedDayRecord.seatNumber}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-slate-200 text-slate-500 flex items-center justify-center shrink-0">
-                        <Calendar className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="font-bold text-slate-800">
-                          {formatDueDateDisplay(selectedDayStr)} &bull; No Check-in Recorded
-                        </div>
-                        <p className="text-[11px] text-slate-500">
-                          No attendance document found in <code className="font-mono">DailyAttendance</code> for this date.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => handleToggleDateAttendance(selectedDayStr)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-all ${
-                      selectedDayRecord
-                        ? 'bg-white border border-rose-200 text-rose-700 hover:bg-rose-50'
-                        : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-2xs'
-                    }`}
-                  >
-                    {selectedDayRecord ? 'Remove Log' : 'Mark Present'}
-                  </button>
-                </div>
-              )}
-            </div>
-
+            {/* Payment History & PDF Receipts Ledger */}
             <div>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <Receipt className="w-4 h-4 text-amber-600" />
                   <h3 className="text-sm font-bold text-slate-900">
-                    Payment History
+                    Payment History &amp; Fee Receipts
                   </h3>
                 </div>
 
                 <span className="text-xs text-slate-500 font-medium">
-                  {paymentHistory.length} payments
+                  {paymentHistory.length} payments recorded
                 </span>
               </div>
 
@@ -576,7 +299,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                   <Receipt className="w-10 h-10 text-slate-300 mx-auto mb-2" />
                   <p className="text-sm font-medium text-slate-700">No payment logs found yet</p>
                   <p className="text-xs text-slate-400 mt-1">
-                    When this student renews their fee, payment records will appear here.
+                    When this student renews their fee, payment records and PDF receipts will appear here.
                   </p>
                 </div>
               ) : (
@@ -596,14 +319,14 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                     return (
                       <div 
                         key={record.id}
-                        className="p-3.5 bg-white rounded-xl border border-slate-200 hover:border-amber-200 transition-all flex items-center justify-between shadow-2xs"
+                        className="p-3.5 bg-white rounded-xl border border-slate-200 hover:border-amber-300 transition-all flex items-center justify-between shadow-2xs gap-3 flex-wrap"
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
                           <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-100 text-amber-700 flex items-center justify-center shrink-0">
                             {getModeIcon(record.paymentMode)}
                           </div>
-                          <div>
-                            <div className="flex items-center gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-sm font-bold text-slate-900">
                                 ₹{record.amountPaid.toLocaleString('en-IN')}
                               </span>
@@ -620,20 +343,34 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                               {formattedDate} &bull; {formattedTime}
                             </p>
                             {record.note && (
-                              <p className="text-[11px] text-slate-400 italic mt-0.5">
+                              <p className="text-[11px] text-slate-400 italic mt-0.5 truncate">
                                 {record.note}
                               </p>
                             )}
                           </div>
                         </div>
 
-                        <div className="text-right shrink-0">
-                          <div className="font-mono text-xs font-semibold text-slate-600 bg-slate-50 px-2 py-1 rounded-md border border-slate-200">
-                            {record.receiptNumber || record.id}
+                        <div className="text-right shrink-0 flex items-center gap-2">
+                          <div>
+                            <div className="font-mono text-xs font-semibold text-slate-600 bg-slate-50 px-2 py-1 rounded-md border border-slate-200">
+                              {record.receiptNumber || record.id}
+                            </div>
+                            <span className="text-[10px] text-emerald-600 font-semibold block mt-0.5">
+                              Verified in Ledger
+                            </span>
                           </div>
-                          <span className="text-[10px] text-emerald-600 font-semibold block mt-1">
-                            Verified in Firestore
-                          </span>
+
+                          {onOpenReceipt && (
+                            <button
+                              type="button"
+                              onClick={() => onOpenReceipt(record, student)}
+                              className="px-2.5 py-1.5 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 rounded-xl transition-all inline-flex items-center gap-1 shadow-2xs"
+                              title="View & Download PDF Receipt"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-amber-600" />
+                              <span>Receipt</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -648,7 +385,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
             <div className="px-4 py-2 bg-slate-800 border-b border-slate-700 flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                <span className="font-mono text-slate-300">StudentDetailScreen.kt (DailyAttendance + PaymentHistory)</span>
+                <span className="font-mono text-slate-300">StudentDetailScreen.kt (PaymentHistory + PDF Receipts)</span>
               </div>
               <button
                 type="button"
@@ -672,7 +409,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
             <div className="p-3 bg-slate-800/50 text-[11px] text-slate-300 border-b border-slate-700 flex items-center gap-2">
               <Receipt className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <span>
-                Demonstrates real-time Flow collection on <code>DailyAttendance</code> (current month calendar grid) and <code>students/{'{studentId}'}/PaymentHistory</code>.
+                Demonstrates real-time Flow collection on <code>students/{'{studentId}'}/PaymentHistory</code> with offline PDF receipt rendering.
               </span>
             </div>
 

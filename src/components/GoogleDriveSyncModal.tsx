@@ -5,6 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import {
   DeviceSyncRole,
   DriveBackupFileMetadata,
+  DrivePermissionVerificationReport,
   GoogleDriveSyncConfig,
   GOOGLE_AUTH_SESSION_STORAGE_KEY,
   MASTER_DRIVE_BACKUP_FILENAME,
@@ -18,23 +19,38 @@ import {
   getCurrentDriveUser,
   getDriveAccessToken,
   getGoogleDriveSyncConfig,
+  getStoredDrivePermissionAuditReport,
   getStoredGoogleAuthSession,
   googleDriveLogout,
   googleDriveSignIn,
   initDriveAuth,
-  publishMasterSnapshotToSyncKeyRelay,
   pullMasterSnapshotFromGoogleDrive,
   pushPrimarySnapshotToGoogleDrive,
+  revokeAndVerifyDrivePublicAccess,
   saveGoogleDriveSyncConfig,
   shareMasterFolderWithEmail,
 } from '../services/googleDriveSyncService';
+import {
+  Phase0BackupVerificationReport,
+  createAndVerifyPhase0LocalBackup,
+  downloadPhase0VerifiedBackupFile,
+  verifyBackupRestoreOnIsolatedProfile,
+} from '../services/storageService';
+import {
+  LIBTRACK_IDB_NAME,
+  LIBTRACK_IDB_VERSION,
+  Phase1MigrationStateSummary,
+  Phase1CopiedDataTestSuiteReport,
+  getStoredPhase1MigrationState,
+  runPhase1IndexedDbMigration,
+  rollbackPhase1IndexedDbMigration,
+  runPhase1CopiedDataTestSuite,
+} from '../services/indexedDbService';
 import {
   getStoredActiveClients,
   subscribeToActiveClients,
   sendPresenceHeartbeat,
   syncActiveClientsWithGoogleDrive,
-  broadcastPresenceToCloudRelay,
-  fetchPeerPresenceFromCloudRelay,
   ActiveClientRecord,
 } from '../services/clientPresenceService';
 import {
@@ -44,7 +60,6 @@ import {
   exportCrashLogsAsJson,
   logCrash,
   syncCrashLogsToGoogleDrive,
-  fetchPeerCrashLogsFromCloudRelay,
   CrashLogEntry,
 } from '../services/crashLogService';
 import {
@@ -86,7 +101,7 @@ interface GoogleDriveSyncModalProps {
   onClose: () => void;
   students: Student[];
   onTriggerToast: (msg: string) => void;
-  onOpenHelpFaq?: (category?: 'SYNC' | 'UPI' | 'SEATS' | 'SHIFTS' | 'ATTENDANCE' | 'REMINDERS') => void;
+  onOpenHelpFaq?: (category?: 'SYNC' | 'UPI' | 'SEATS' | 'SHIFTS' | 'RECEIPTS' | 'REMINDERS') => void;
 }
 
 type DriveModalSubTab = 'SYNC_ROLE' | 'HEARTBEAT_CLIENTS' | 'CRASH_LOGS';
@@ -113,11 +128,27 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
   const [driveFileMeta, setDriveFileMeta] = useState<DriveBackupFileMetadata | null>(null);
   const [isCheckingDrive, setIsCheckingDrive] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isGeneratingSyncKey, setIsGeneratingSyncKey] = useState(false);
   const [syncSuccessMessage, setSyncSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [shareEmailInput, setShareEmailInput] = useState('');
   const [isSharingEmail, setIsSharingEmail] = useState(false);
+
+  // Phase 0 Security Containment & Verified Backup state
+  const [phase0BackupReport, setPhase0BackupReport] = useState<Phase0BackupVerificationReport>(() =>
+    createAndVerifyPhase0LocalBackup(false)
+  );
+  const [drivePermissionAudit, setDrivePermissionAudit] =
+    useState<DrivePermissionVerificationReport | null>(() => getStoredDrivePermissionAuditReport());
+  const [isAuditingDrivePermissions, setIsAuditingDrivePermissions] = useState(false);
+
+  // Phase 1 IndexedDB Migration & Copied-Data Test Lab state (Production Auto-Activation Disabled)
+  const [phase1State, setPhase1State] = useState<Phase1MigrationStateSummary>(() =>
+    getStoredPhase1MigrationState()
+  );
+  const [phase1TestReport, setPhase1TestReport] = useState<Phase1CopiedDataTestSuiteReport | null>(
+    null
+  );
+  const [isRunningPhase1, setIsRunningPhase1] = useState(false);
 
   // Active Clients, Heartbeat & Crash Logs state
   const [clients, setClients] = useState<ActiveClientRecord[]>(() => getStoredActiveClients());
@@ -174,25 +205,12 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
       setStoredAuthSession(getStoredGoogleAuthSession());
       setSyncSuccessMessage(null);
       setErrorMessage(null);
+      setPhase0BackupReport(createAndVerifyPhase0LocalBackup(false));
+      setDrivePermissionAudit(getStoredDrivePermissionAuditReport());
       const updatedClients = sendPresenceHeartbeat();
       setClients(updatedClients);
       setCrashLogs(getCrashLogs());
       setLogsFolderMeta(getStoredDriveLogsFolderMeta());
-
-      // Automatically publish/refresh the Primary Phone's live `LK-...` Sync Key when opening the modal
-      if (latestCfg.deviceRole === 'PRIMARY') {
-        setIsGeneratingSyncKey(true);
-        publishMasterSnapshotToSyncKeyRelay()
-          .then(() => {
-            setSyncConfig(getGoogleDriveSyncConfig());
-          })
-          .catch(() => {
-            // Non-fatal if offline; Offline Sync Code (`LKSYNC1:...`) remains available
-          })
-          .finally(() => {
-            setIsGeneratingSyncKey(false);
-          });
-      }
 
       const currentToken = getDriveAccessToken();
       if (currentToken) {
@@ -201,15 +219,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
         refreshDriveFileMetadata(currentToken);
       } else {
         setNeedsAuth(true);
-        if (latestCfg.deviceRole === 'SECONDARY' && latestCfg.sharedFolderInput?.trim()) {
-          refreshDriveFileMetadata(null);
-        }
       }
-    }
-
-    if (isOpen) {
-      fetchPeerPresenceFromCloudRelay().then((updated) => setClients([...updated])).catch(() => {});
-      fetchPeerCrashLogsFromCloudRelay().then((logs) => setCrashLogs([...logs])).catch(() => {});
     }
 
     const unsubClients = subscribeToActiveClients((updated) => setClients([...updated]));
@@ -321,7 +331,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
       setSyncConfig(getGoogleDriveSyncConfig());
       setShareEmailInput('');
       onTriggerToast(
-        `Shared Lakshay_Library_Master folder with ${res.sharedEmail}! They can now sign in with their Gmail on the Secondary phone and pull.`
+        `Shared Lakshay_Library_Master folder with ${res.sharedEmail}!`
       );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to share folder.';
@@ -331,44 +341,114 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
     }
   };
 
-  const handleRefreshAndCopyMasterSyncKey = async () => {
-    setErrorMessage(null);
-    setSyncSuccessMessage(null);
-
-    // If we already have a generated `LK-...` key, copy it immediately inside the user click gesture
-    if (syncConfig.masterSyncKey) {
-      await copyTextToClipboard(syncConfig.masterSyncKey);
-    }
-
-    setIsGeneratingSyncKey(true);
-    try {
-      const res = await publishMasterSnapshotToSyncKeyRelay();
-      const updatedCfg = getGoogleDriveSyncConfig();
-      setSyncConfig(updatedCfg);
-      await copyTextToClipboard(res.syncKey);
-      const msg = `Copied Master Sync Key (${res.syncKey}) with ${res.studentCount} students! Paste it on your Secondary Phone.`;
-      setSyncSuccessMessage(msg);
-      onTriggerToast(msg);
-    } catch {
-      // Fallback: if Cloud Relay is unreachable, copy the 100% self-contained Offline Sync Code
-      const offlineKey = generateOfflineSyncPackageKey();
-      await copyTextToClipboard(offlineKey);
-      const msg =
-        'Copied Self-Contained Offline Sync Key (LKSYNC1:...)! Paste it on your Secondary Phone to sync offline.';
-      setSyncSuccessMessage(msg);
-      onTriggerToast(msg);
-    } finally {
-      setIsGeneratingSyncKey(false);
-    }
-  };
-
   const handleCopyOfflineSyncPackage = async () => {
     setErrorMessage(null);
     const offlineKey = generateOfflineSyncPackageKey();
     await copyTextToClipboard(offlineKey);
-    const msg = `Copied Offline Sync Package (${students.length} students)! Paste in the Sync Key box on your Secondary Phone.`;
+    const msg = `Copied Self-Contained Offline Sync Package (LKSYNC1:..., ${students.length} active students)! Paste in the Sync Package box on your Secondary Phone.`;
     setSyncSuccessMessage(msg);
     onTriggerToast(msg);
+  };
+
+  const handleVerifyAndDownloadPhase0Backup = () => {
+    const report = downloadPhase0VerifiedBackupFile();
+    setPhase0BackupReport(report);
+    const msg = `Downloaded ${report.downloadedFileName} (${report.downloadedFileSizeBytes.toLocaleString()} bytes) • File SHA-256: ${report.downloadedFileSha256Hex.slice(0, 16)}... • Immutable Backup Preserved: ${report.originalBackupPreservedImmutable ? 'YES' : 'NO'}`;
+    setSyncSuccessMessage(msg);
+    onTriggerToast(msg);
+  };
+
+  const handleTestNonDestructiveRestore = () => {
+    const res = verifyBackupRestoreOnIsolatedProfile();
+    setPhase0BackupReport(createAndVerifyPhase0LocalBackup(false));
+    if (res.reproducedBitForBit && res.productionStorageUntouched) {
+      const msg = `✓ Isolated Profile Restore Verified Bit-for-Bit (SHA-256: ${res.postRestoreSha256Hex.slice(0, 16)}..., ${res.restoredLocalKeySlots} localStorage + ${res.restoredSessionKeySlots} sessionStorage slots verified, Active Production Storage Untouched)!`;
+      setSyncSuccessMessage(msg);
+      onTriggerToast(msg);
+    } else {
+      setErrorMessage('Backup restore integrity check reported a mismatch.');
+    }
+  };
+
+  const handleRunPhase1CopiedDataTests = async () => {
+    setIsRunningPhase1(true);
+    setErrorMessage(null);
+    try {
+      const report = await runPhase1CopiedDataTestSuite();
+      setPhase1TestReport(report);
+      setPhase1State(getStoredPhase1MigrationState());
+      const msg = `✓ Phase 1 Copied-Data Suite: ${report.passedScenarios}/${report.totalScenarios} Scenarios Passed • Production Storage Untouched: ${report.productionStorageUntouched ? 'YES' : 'NO'}`;
+      setSyncSuccessMessage(msg);
+      onTriggerToast(msg);
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Phase 1 test suite failed.');
+    } finally {
+      setIsRunningPhase1(false);
+    }
+  };
+
+  const handleRunPhase1DevMigration = async () => {
+    setIsRunningPhase1(true);
+    setErrorMessage(null);
+    try {
+      const res = await runPhase1IndexedDbMigration({ enableDualWriteAfterVerify: true });
+      setPhase1State(res);
+      const msg = `✓ IndexedDB (${LIBTRACK_IDB_NAME} v${LIBTRACK_IDB_VERSION}) Dev Migration: ${res.status} (${res.counts.totalStudents} students, ${res.counts.totalPayments} payments, localStorage Untouched: ${res.localStoragePreservedUntouched ? 'YES' : 'NO'})`;
+      setSyncSuccessMessage(msg);
+      onTriggerToast(msg);
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'IndexedDB migration failed.');
+    } finally {
+      setIsRunningPhase1(false);
+    }
+  };
+
+  const handleRollbackPhase1Migration = async () => {
+    setIsRunningPhase1(true);
+    setErrorMessage(null);
+    try {
+      const res = await rollbackPhase1IndexedDbMigration('Manual rollback triggered in Dev Lab');
+      setPhase1State(res);
+      const msg = `✓ Phase 1 IndexedDB Migration Rolled Back (${res.status}) • Active Read Source: ${res.activeReadSource} • localStorage Intact: ${res.localStoragePreservedUntouched ? 'YES' : 'NO'}`;
+      setSyncSuccessMessage(msg);
+      onTriggerToast(msg);
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Rollback failed.');
+    } finally {
+      setIsRunningPhase1(false);
+    }
+  };
+
+  const handleRevokeAndVerifyDrivePublicPermissions = async (revokePublicAnyone = false) => {
+    if (!accessToken) {
+      setNeedsAuth(true);
+      onTriggerToast('Please sign in with Google first to audit Google Drive permissions.');
+      return;
+    }
+    setIsAuditingDrivePermissions(true);
+    setErrorMessage(null);
+    try {
+      const report = await revokeAndVerifyDrivePublicAccess(accessToken, {
+        revokePublicAnyone,
+      });
+      setDrivePermissionAudit(report);
+      if (report.overallStatus === 'VERIFIED_PRIVATE') {
+        const msg = revokePublicAnyone
+          ? `✓ Google Drive Public Access Revoked & Verified Private (${report.totalResourcesInspected} resources audited, ${report.totalPublicPermissionsRevoked} public permissions revoked)!`
+          : `✓ Live Google Drive Permission Audit Complete: VERIFIED_PRIVATE (${report.totalResourcesInspected} resources inspected, 0 public permissions found)!`;
+        setSyncSuccessMessage(msg);
+        onTriggerToast(msg);
+      } else {
+        setErrorMessage(
+          `Drive Permission Audit status: ${report.overallStatus} (${report.totalResourcesInspected}/${report.totalResourcesDiscovered} inspected, ${report.unverifiedResources.length} unverified). ${report.errorMessage || ''}`
+        );
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to audit Google Drive permissions.';
+      setErrorMessage(msg);
+    } finally {
+      setIsAuditingDrivePermissions(false);
+    }
   };
 
   const handleConfirmedPrimaryPush = async () => {
@@ -385,9 +465,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
       const res = await pushPrimarySnapshotToGoogleDrive(accessToken, driveFileMeta?.id);
       setSyncConfig(getGoogleDriveSyncConfig());
       await refreshDriveFileMetadata(accessToken);
-      const msg = `Primary Snapshot synced (${res.studentCount} students)${
-        res.syncKey ? ` • Sync Key: ${res.syncKey}` : ''
-      }!`;
+      const msg = `Primary Snapshot synced privately to Google Drive (${res.studentCount} students)!`;
       setSyncSuccessMessage(msg);
       onTriggerToast(msg);
     } catch (err: unknown) {
@@ -408,11 +486,11 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
       customKeyOverride !== undefined
         ? customKeyOverride.trim()
         : (syncConfig.sharedFolderInput || '').trim();
-    const hasSyncKey = Boolean(keyToUse || syncConfig.masterSyncChannelTopic);
-    if (!accessToken && !hasSyncKey) {
+    const isOfflineSyncPackage = keyToUse.toUpperCase().startsWith('LKSYNC1:');
+    if (!accessToken && !isOfflineSyncPackage) {
       setNeedsAuth(true);
       const msg =
-        'Please paste the Primary Phone Master Sync Key (starts with LK-...) in Section 1 first.';
+        'Sync Key Only (LK-... via public ntfy.sh) is disabled in Phase 0 Security Containment. Please sign in with Google Drive OAuth or paste a self-contained Offline Sync Package (LKSYNC1:...).';
       setErrorMessage(msg);
       onTriggerToast(msg);
       return;
@@ -424,7 +502,9 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
     try {
       const res = await pullMasterSnapshotFromGoogleDrive(accessToken, keyToUse);
       setSyncConfig(getGoogleDriveSyncConfig());
-      await refreshDriveFileMetadata(accessToken);
+      if (accessToken) {
+        await refreshDriveFileMetadata(accessToken);
+      }
       const successMsg = `✓ Successfully synced ${res.studentCount} students from ${res.primaryDeviceName}!`;
       setSyncSuccessMessage(successMsg);
       onTriggerToast(successMsg);
@@ -444,10 +524,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
   const handleManualHeartbeatPing = () => {
     const updated = sendPresenceHeartbeat();
     setClients(updated);
-    broadcastPresenceToCloudRelay().catch(() => {});
-    fetchPeerPresenceFromCloudRelay().then((peers) => setClients([...peers])).catch(() => {});
-    fetchPeerCrashLogsFromCloudRelay().then((logs) => setCrashLogs([...logs])).catch(() => {});
-    onTriggerToast('Heartbeat ping sent! Active client sessions and secondary device logs refreshed.');
+    onTriggerToast('Local heartbeat refreshed! Use "Sync to Drive" to sync telemetry via authenticated Google Drive.');
   };
 
   const handleSyncHeartbeatAndCrashLogsToDrive = async () => {
@@ -845,75 +922,323 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                   </div>
                 </div>
 
-                {/* Cross-Account Gmail Sync Helper (Different Gmail on Secondary Device) */}
-                {syncConfig.deviceRole === 'PRIMARY' ? (
-                  <div className="p-3 rounded-xl bg-white border border-slate-200/70 space-y-2.5">
-                    <div className="text-[11px] font-bold text-slate-800 flex items-center justify-between">
-                      <span>🔑 Share with Secondary Phone (Any Gmail Account)</span>
-                      <span className="text-[10px] font-mono text-emerald-700 font-bold">
-                        {syncConfig.masterSyncKey
-                          ? `Ready (${students.length} Students)`
-                          : 'Generating Key...'}
+                {/* Phase 0 Emergency Security & Data-Loss Containment Card */}
+                <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 space-y-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="text-[11px] font-bold text-emerald-950 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+                      <span>Phase 0 Security &amp; Data-Loss Containment Active</span>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-600 text-white font-bold">
+                      ntfy.sh DISABLED &bull; PAYMENTS PROTECTED
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-700 leading-relaxed">
+                    Public <code>ntfy.sh</code> broadcasting/polling and public Google Drive{' '}
+                    <code>anyoneWithLink</code> permissions are permanently disabled. Note:{' '}
+                    <strong>Sync Key Only (LK-... via ntfy.sh) synchronization is disabled</strong>{' '}
+                    to protect student and payment privacy. Use{' '}
+                    <strong>Authenticated Google Drive OAuth</strong> or{' '}
+                    <strong>100% Offline Sync Packages (LKSYNC1:...)</strong> below.
+                  </p>
+
+                  {/* Pre-Containment Local Backup Verification */}
+                  <div className="p-2.5 rounded-xl bg-white border border-emerald-200/80 space-y-2 text-[11px]">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="font-bold text-slate-900">
+                        1. Verified Local Backup Snapshot ({phase0BackupReport.capturedKeySlotsCount}/
+                        {phase0BackupReport.expectedTotalKeySlots} Slots Captured:{' '}
+                        {phase0BackupReport.populatedKeyCount} Populated,{' '}
+                        {phase0BackupReport.uninitializedNullKeyCount} Uninitialized)
+                      </span>
+                      <span className="font-mono text-[10px] font-bold text-emerald-700">
+                        SHA-256: {phase0BackupReport.sha256Hex.slice(0, 16)}&hellip; (FNV-1a: {phase0BackupReport.checksumHex})
                       </span>
                     </div>
-
-                    {/* 1-Tap Copy Master Sync Key */}
-                    <div className="p-2.5 rounded-xl bg-amber-50/80 border border-amber-200/80 space-y-2">
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-amber-900 flex items-center justify-between">
-                        <span>Method 1 (Recommended — Bypasses Error 403): Master Sync Key</span>
-                        <span className="font-mono text-[10px] text-amber-800">
-                          No Google Sign-In Needed
-                        </span>
+                    <div className="text-[10px] font-mono text-slate-600 break-all bg-slate-50 px-2 py-1.5 rounded border border-slate-200/60 space-y-0.5">
+                      <div>
+                        <strong>Canonical 23-Slot SHA-256:</strong> {phase0BackupReport.sha256Hex}
                       </div>
-                      <p className="text-[11px] text-slate-600 leading-snug">
-                        Tap <strong>Copy Sync Key</strong> and paste on your secondary device to sync students, seats, shifts &amp; UPI in real time.
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          readOnly
-                          value={
-                            syncConfig.masterSyncKey ||
-                            (isGeneratingSyncKey
-                              ? 'Generating LK-... Sync Key...'
-                              : 'Tap "Copy Sync Key" to generate LK-... key')
-                          }
-                          className="flex-1 px-2.5 py-1.5 rounded-lg border border-amber-300/80 bg-white text-xs font-mono font-bold text-slate-900"
-                        />
+                      <div>
+                        <strong>Download File:</strong> {phase0BackupReport.downloadedFileName} (
+                        {phase0BackupReport.downloadedFileSizeBytes.toLocaleString()} bytes &bull;{' '}
+                        {phase0BackupReport.downloadedFileTimestampISO})
+                      </div>
+                      <div>
+                        <strong>Downloaded File SHA-256:</strong>{' '}
+                        {phase0BackupReport.downloadedFileSha256Hex}
+                      </div>
+                      <div>
+                        <strong>Immutable Original Preserved:</strong>{' '}
+                        {phase0BackupReport.originalBackupPreservedImmutable ? 'TRUE (Write-Once)' : 'FALSE'}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[10px] font-mono text-slate-600">
+                      <div className="p-1.5 rounded bg-slate-50 border border-slate-200/60">
+                        Active: <strong>{phase0BackupReport.activeStudentCount}</strong>
+                      </div>
+                      <div className="p-1.5 rounded bg-slate-50 border border-slate-200/60">
+                        Archived: <strong>{phase0BackupReport.archivedStudentCount}</strong>
+                      </div>
+                      <div className="p-1.5 rounded bg-slate-50 border border-slate-200/60">
+                        Payments: <strong>{phase0BackupReport.totalPaymentRecordsCount}</strong>
+                      </div>
+                      <div className="p-1.5 rounded bg-slate-50 border border-slate-200/60">
+                        Total: <strong>₹{phase0BackupReport.totalPaymentAmountINR.toLocaleString('en-IN')}</strong>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 pt-0.5 flex-wrap">
+                      <span className="text-[10px] text-slate-500">
+                        Immutable Baseline Created: {new Date(phase0BackupReport.createdAtISO).toLocaleString()}
+                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <button
                           type="button"
-                          disabled={isGeneratingSyncKey}
-                          onClick={handleRefreshAndCopyMasterSyncKey}
-                          className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold shrink-0 flex items-center gap-1.5"
+                          onClick={handleTestNonDestructiveRestore}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-bold inline-flex items-center gap-1"
                         >
-                          {isGeneratingSyncKey ? (
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Verify Restore (Isolated Profile)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleVerifyAndDownloadPhase0Backup}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold inline-flex items-center gap-1"
+                        >
+                          <Download className="w-3 h-3" />
+                          <span>Download Verified Backup (.JSON)</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Google Drive Public Access Revocation & Effective Permission Verification */}
+                  <div className="p-2.5 rounded-xl bg-white border border-emerald-200/80 space-y-2 text-[11px]">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="font-bold text-slate-900">
+                        2. Live Google Drive Public Access &amp; Inherited Permission Audit
+                      </span>
+                      <span
+                        className={`font-mono text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          drivePermissionAudit?.overallStatus === 'VERIFIED_PRIVATE'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {drivePermissionAudit?.overallStatus || 'READY TO VERIFY LIVE'}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-600 leading-snug">
+                      Inspects <code>{MASTER_DRIVE_ROOT_FOLDER_NAME}</code>, subfolders, and child{' '}
+                      <code>.json</code> files using your authenticated Google account. Removes{' '}
+                      <code>type: &apos;anyone&apos;</code> permissions at their source (
+                      <code>inheritedFrom</code>), preserves existing pre-containment Drive backups,
+                      and flags any <code>domain</code> or staff permissions without auto-revoking them.
+                    </p>
+                    {drivePermissionAudit && drivePermissionAudit.resources.length > 0 && (
+                      <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                        {drivePermissionAudit.resources.map((res) => (
+                          <div
+                            key={res.id}
+                            className="flex items-center justify-between text-[10px] font-mono p-1 rounded bg-slate-50 border border-slate-200/60"
+                          >
+                            <span className="truncate mr-2">
+                              [{res.resourceType}] {res.name}
+                            </span>
+                            <span
+                              className={
+                                res.hasPublicAnyoneAccess
+                                  ? 'text-rose-600 font-bold shrink-0'
+                                  : 'text-emerald-700 font-bold shrink-0'
+                              }
+                            >
+                              {res.hasPublicAnyoneAccess
+                                ? 'PUBLIC (ACTION NEEDED)'
+                                : `PRIVATE${
+                                    res.revokedPermissionIds.length > 0
+                                      ? ` (${res.revokedPermissionIds.length} revoked)`
+                                      : ''
+                                  }`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {drivePermissionAudit?.unverifiedResources &&
+                      drivePermissionAudit.unverifiedResources.length > 0 && (
+                        <div className="p-2 rounded-lg bg-rose-50 border border-rose-200/80 space-y-1">
+                          <div className="text-[10px] font-bold text-rose-900">
+                            UNVERIFIED / Inaccessible Resources ({drivePermissionAudit.unverifiedResources.length}):
+                          </div>
+                          {drivePermissionAudit.unverifiedResources.map((ur, idx) => (
+                            <div
+                              key={`${ur.idOrName}-${idx}`}
+                              className="text-[10px] font-mono text-rose-800"
+                            >
+                              &bull; [{ur.resourceType}] {ur.idOrName} &mdash; {ur.reason}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    {drivePermissionAudit?.flaggedDomainOrStaffPermissions &&
+                      drivePermissionAudit.flaggedDomainOrStaffPermissions.length > 0 && (
+                        <div className="p-2 rounded-lg bg-amber-50 border border-amber-200/80 space-y-1">
+                          <div className="text-[10px] font-bold text-amber-900">
+                            Preserved Domain / Named Staff Permissions (Requires Explicit Approval to Revoke):
+                          </div>
+                          {drivePermissionAudit.flaggedDomainOrStaffPermissions.map((fp, idx) => (
+                            <div
+                              key={`${fp.resourceId}-${fp.permissionId}-${idx}`}
+                              className="text-[10px] font-mono text-amber-800"
+                            >
+                              &bull; [{fp.resourceName}] {fp.type}:{fp.role} (
+                              {fp.emailAddress || fp.domain || fp.displayName || fp.permissionId}) &mdash;{' '}
+                              {fp.inherited ? `inherited from ${fp.inheritedFrom}` : 'direct'}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    <div className="flex items-center justify-between gap-2 pt-0.5 flex-wrap">
+                      <span className="text-[10px] text-slate-500">
+                        {drivePermissionAudit?.verifiedAtISO
+                          ? `Last Live Audit (${drivePermissionAudit.mode}): ${new Date(drivePermissionAudit.verifiedAtISO).toLocaleString()}`
+                          : 'Sign in with Google to run Live Drive Permission Audit'}
+                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          disabled={isAuditingDrivePermissions}
+                          onClick={() => handleRevokeAndVerifyDrivePublicPermissions(false)}
+                          className="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-[10px] font-bold inline-flex items-center gap-1"
+                        >
+                          <ShieldCheck className="w-3 h-3" />
+                          <span>1. Live Audit Only (Read-Only)</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isAuditingDrivePermissions}
+                          onClick={() => handleRevokeAndVerifyDrivePublicPermissions(true)}
+                          className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-[10px] font-bold inline-flex items-center gap-1"
+                        >
+                          {isAuditingDrivePermissions ? (
                             <>
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                              <span>Updating...</span>
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                              <span>Processing...</span>
                             </>
                           ) : (
-                            <span>Copy Sync Key</span>
+                            <>
+                              <Lock className="w-3 h-3" />
+                              <span>2. Authorize &amp; Revoke Public Access</span>
+                            </>
                           )}
                         </button>
                       </div>
-                      <div className="flex items-center justify-between gap-2 pt-0.5 flex-wrap">
-                        <span className="text-[10px] text-slate-500">
-                          Need 100% offline WhatsApp transfer?
-                        </span>
+                    </div>
+                  </div>
+
+                  {/* Phase 1 IndexedDB Migration & Copied-Data Verification Lab (Dev Only — Auto-Activation Disabled) */}
+                  <div className="p-2.5 rounded-xl bg-white border border-emerald-200/80 space-y-2 text-[11px]">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="font-bold text-slate-900">
+                        3. Phase 1 IndexedDB Adapter &amp; Copied-Data Lab (
+                        <code>
+                          {LIBTRACK_IDB_NAME} v{LIBTRACK_IDB_VERSION}
+                        </code>
+                        )
+                      </span>
+                      <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-800">
+                        {phase1State.status} &bull; PROD AUTO-MIGRATION: OFF
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-600 leading-snug">
+                      Non-destructive 8-checkpoint migration into <code>{LIBTRACK_IDB_NAME}</code>{' '}
+                      (11 object stores). Production auto-activation is disabled pending explicit
+                      approval. Original <code>localStorage</code> is never deleted or cleared.
+                    </p>
+                    {phase1TestReport && (
+                      <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200/80 space-y-1 text-[10px] font-mono">
+                        <div className="font-bold text-emerald-950">
+                          Copied-Data Suite: {phase1TestReport.passedScenarios}/
+                          {phase1TestReport.totalScenarios} Scenarios PASSED &bull; Production
+                          Untouched: {phase1TestReport.productionStorageUntouched ? 'TRUE' : 'FALSE'}
+                        </div>
+                        {phase1TestReport.scenarios.map((sc) => (
+                          <div key={sc.scenarioId} className="text-emerald-900">
+                            {sc.passed ? '✓' : '✗'} {sc.title}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-2 pt-0.5 flex-wrap">
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        Active Read Source: <strong>{phase1State.activeReadSource}</strong>
+                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <button
                           type="button"
-                          onClick={handleCopyOfflineSyncPackage}
-                          className="text-[10px] font-bold text-amber-800 hover:text-amber-700 underline"
+                          disabled={isRunningPhase1}
+                          onClick={handleRunPhase1CopiedDataTests}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white text-[10px] font-bold inline-flex items-center gap-1"
                         >
-                          Copy Offline Sync Package (LKSYNC1:...)
+                          <span>Run Copied-Data Test Suite</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isRunningPhase1}
+                          onClick={handleRunPhase1DevMigration}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white text-[10px] font-bold inline-flex items-center gap-1"
+                        >
+                          <span>Test Dev Migration</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isRunningPhase1}
+                          onClick={handleRollbackPhase1Migration}
+                          className="px-2.5 py-1 rounded-lg bg-rose-700 hover:bg-rose-600 disabled:opacity-50 text-white text-[10px] font-bold inline-flex items-center gap-1"
+                        >
+                          <span>Rollback to localStorage</span>
                         </button>
                       </div>
                     </div>
+                  </div>
+                </div>
 
-                    {/* Email Permission Grant */}
+                {/* Offline Sync Package & Authenticated Email Sharing */}
+                {syncConfig.deviceRole === 'PRIMARY' ? (
+                  <div className="p-3 rounded-xl bg-white border border-slate-200/70 space-y-2.5">
+                    <div className="text-[11px] font-bold text-slate-800 flex items-center justify-between">
+                      <span>🔐 Private Transfer to Secondary Phone</span>
+                      <span className="text-[10px] font-mono text-emerald-700 font-bold">
+                        {students.length} Active Students
+                      </span>
+                    </div>
+
+                    {/* Method 1: Self-Contained Offline Sync Package */}
+                    <div className="p-2.5 rounded-xl bg-amber-50/80 border border-amber-200/80 space-y-2">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-amber-900 flex items-center justify-between">
+                        <span>Method 1: Self-Contained Offline Sync Package (LKSYNC1:...)</span>
+                        <span className="font-mono text-[10px] text-amber-800">
+                          Zero Cloud Relay
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 leading-snug">
+                        Generates a self-contained encoded package directly in your clipboard without
+                        transmitting any data to third-party servers.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleCopyOfflineSyncPackage}
+                        className="w-full px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center justify-center gap-1.5"
+                      >
+                        <span>Copy Self-Contained Offline Sync Package (LKSYNC1:...)</span>
+                      </button>
+                    </div>
+
+                    {/* Method 2: Email Permission Grant */}
                     <div className="space-y-1.5 pt-1">
                       <div className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
-                        Method 2: Grant Google Drive Folder Access by Email
+                        Method 2: Grant Specific Google Drive User Access by Email
                       </div>
                       <div className="flex items-center gap-2">
                         <input
@@ -934,7 +1259,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                       </div>
                       {syncConfig.sharedWithEmails && syncConfig.sharedWithEmails.length > 0 && (
                         <div className="text-[10px] text-emerald-700 font-mono">
-                          Shared with: {syncConfig.sharedWithEmails.join(', ')}
+                          Shared privately with: {syncConfig.sharedWithEmails.join(', ')}
                         </div>
                       )}
                     </div>
@@ -955,16 +1280,15 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                 ) : (
                   <div className="p-3 rounded-xl bg-white border border-slate-200/70 space-y-2.5">
                     <div className="text-[11px] font-bold text-slate-800 flex items-center justify-between">
-                      <span>🔑 Pull from Primary Phone (Works with Any Gmail!)</span>
-                      <span className="text-[10px] font-mono text-emerald-700 font-bold">
-                        No Error 403 Block
+                      <span>🔐 Import Offline Sync Package (LKSYNC1:...)</span>
+                      <span className="text-[10px] font-mono text-amber-700 font-bold">
+                        LK-... Relay Disabled
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-500 leading-snug">
-                      Paste the <strong>Master Sync Key</strong> (starts with <code>LK-...</code> or{' '}
-                      <code>LKSYNC1:...</code>) from your Primary Phone below and tap{' '}
-                      <strong>Pull via Sync Key</strong> — works instantly without needing Google
-                      Drive OAuth!
+                      Paste a <strong>Self-Contained Offline Sync Package</strong> (starts with{' '}
+                      <code>LKSYNC1:...</code>) from your Primary Phone below, or sign in with Google
+                      Drive OAuth in Section 2 to pull directly from Google Drive.
                     </p>
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                       <div className="relative flex-1 flex items-center">
@@ -972,7 +1296,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                           type="text"
                           value={syncConfig.sharedFolderInput || ''}
                           onChange={(e) => handleSharedFolderInputChange(e.target.value)}
-                          placeholder="Paste LK-... Sync Key or LKSYNC1:... Offline Key"
+                          placeholder="Paste LKSYNC1:... Offline Sync Package"
                           className="w-full px-3 py-2 pr-8 rounded-xl border border-slate-200/80 bg-slate-50 text-xs text-slate-900 font-mono focus:outline-hidden focus:ring-2 focus:ring-amber-500/40"
                         />
                         {syncConfig.sharedFolderInput && (
@@ -980,7 +1304,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                             type="button"
                             onClick={() => handleSharedFolderInputChange('')}
                             className="absolute right-2 text-slate-400 hover:text-slate-600 p-1"
-                            title="Clear Sync Key"
+                            title="Clear Sync Package"
                           >
                             <X className="w-3.5 h-3.5" />
                           </button>
@@ -995,12 +1319,12 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                         {isSyncing ? (
                           <>
                             <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            <span>Pulling...</span>
+                            <span>Importing...</span>
                           </>
                         ) : (
                           <>
                             <CloudDownload className="w-3.5 h-3.5" />
-                            <span>Pull via Sync Key</span>
+                            <span>Import Package</span>
                           </>
                         )}
                       </button>
@@ -1020,44 +1344,6 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                     )}
                   </div>
                 )}
-
-                {/* In-App Sharing & Error 403 Fix Guide Note */}
-                <div className="p-3.5 rounded-xl bg-amber-50/75 border border-amber-200/80 text-[11px] text-slate-700 space-y-2">
-                  <div className="font-bold text-amber-900 flex items-center justify-between gap-2">
-                    <span>📌 How to Sync Another Gmail &amp; Fix &quot;Error 403: access_denied&quot;</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                      2 Ways
-                    </span>
-                  </div>
-                  <div className="space-y-1.5 leading-relaxed">
-                    <div>
-                      <strong className="text-slate-900">
-                        • Way 1 — Instant Sync Key (No Google Verification Needed):
-                      </strong>{' '}
-                      On the Primary Phone, tap <strong>Copy Sync Key</strong> after pushing your
-                      snapshot. On the Secondary Phone, paste that key into the box above and tap{' '}
-                      <strong>Pull via Sync Key</strong> (or sign in using{' '}
-                      <strong>Sign in with Another Gmail (Identity Mode)</strong> below).
-                    </div>
-                    <div>
-                      <strong className="text-slate-900">
-                        • Way 2 — Enable Full Google OAuth for All Emails (1-Click in Cloud Console):
-                      </strong>{' '}
-                      Google shows <code>Error 403: access_denied</code> when a project&apos;s OAuth
-                      screen is in <em>Testing</em> mode. Open{' '}
-                      <a
-                        href="https://console.cloud.google.com/auth/audience"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-amber-800 underline font-semibold"
-                      >
-                        Google Cloud Console → OAuth Audience
-                      </a>{' '}
-                      and click <strong>&quot;Publish App&quot;</strong> (or add the secondary email
-                      under <strong>Test users → + Add users</strong>).
-                    </div>
-                  </div>
-                </div>
               </div>
 
               {/* 2. Google Account Connection & Sign-In Data Storage */}

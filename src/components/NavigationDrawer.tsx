@@ -8,7 +8,6 @@ import {
 import {
   Settings,
   Palette,
-  Scan,
   Clock,
   Armchair,
   X,
@@ -24,7 +23,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 
-export const APP_VERSION = 'v2.0.7';
+export const APP_VERSION = 'v2.0.8';
 export const GITHUB_REPO_URL = 'https://github.com/keshav-sharp/lakshay-library-management';
 
 export interface DrawerMenuItem {
@@ -42,7 +41,7 @@ interface NavigationDrawerProps {
   isDarkMode: boolean;
   onOpenSettings: () => void;
   onSelectTheme: (palette: ThemePalette) => void;
-  onOpenScanner: () => void;
+  onOpenScanner?: () => void;
   onOpenShiftAndHistory: () => void;
   onOpenSeatMatrix: () => void;
   onResetDatabase?: () => void;
@@ -100,16 +99,6 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
       onClick: () => {
         handleCloseDrawer();
         onOpenSettings();
-      },
-    },
-    {
-      id: 'scan_qr',
-      label: 'Scan / QR Check-in',
-      subtitle: 'Front-desk digital attendance scanner',
-      icon: Scan,
-      onClick: () => {
-        handleCloseDrawer();
-        onOpenScanner();
       },
     },
     {

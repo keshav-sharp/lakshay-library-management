@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Student } from '../types/student';
+import { PaymentRecord, Student } from '../types/student';
 import { useTheme } from '../context/ThemeContext';
 import { markStudentPaidInFirestore, advanceDateByOneMonth, formatDueDateDisplay } from '../services/storageService';
 import { 
@@ -20,7 +20,7 @@ interface PaymentConfirmModalProps {
   student: Student | null;
   isOpen: boolean;
   onClose: () => void;
-  onPaymentSuccess?: () => void;
+  onPaymentSuccess?: (record?: PaymentRecord, updatedStudent?: Student) => void;
 }
 
 export const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
@@ -32,6 +32,7 @@ export const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
   const { darkModeClass } = useTheme();
   const [paymentMode, setPaymentMode] = useState<'UPI' | 'Cash' | 'Card' | 'Bank Transfer'>('UPI');
   const [customAmount, setCustomAmount] = useState<string>('');
+  const [transactionId, setTransactionId] = useState<string>('');
   const [note, setNote] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -45,11 +46,14 @@ export const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
 
     setTimeout(() => {
       try {
-        markStudentPaidInFirestore(
+        const { updatedStudent, newRecord } = markStudentPaidInFirestore(
           student.id,
           currentFee || student.monthlyFee,
           paymentMode,
-          note || `Monthly renewal (${paymentMode})`
+          note || `Monthly renewal (${paymentMode})`,
+          {
+            transactionId: transactionId.trim() || undefined,
+          }
         );
 
         // Fire festive confetti
@@ -65,7 +69,9 @@ export const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
 
         setIsProcessing(false);
         onClose();
-        if (onPaymentSuccess) onPaymentSuccess();
+        if (onPaymentSuccess) {
+          onPaymentSuccess(newRecord, updatedStudent);
+        }
       } catch (err) {
         console.error(err);
         setIsProcessing(false);
@@ -189,6 +195,20 @@ export const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
             </div>
           </div>
 
+          {/* Transaction / UTR ID */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Transaction Ref / UTR / Cheque No. (Optional)
+            </label>
+            <input
+              type="text"
+              value={transactionId}
+              onChange={(e) => setTransactionId(e.target.value)}
+              placeholder="e.g. UPI Ref / UTR / Cheque Number"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-mono"
+            />
+          </div>
+
           {/* Receipt Note */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -204,7 +224,7 @@ export const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
           </div>
 
           <p className="text-[11px] text-slate-400">
-            Confirming will write a timestamped record to the student&apos;s <code className="text-indigo-600 font-mono">PaymentHistory</code> sub-collection and advance their due date.
+            Confirming will write a timestamped record to the student&apos;s <code className="text-indigo-600 font-mono">PaymentHistory</code> sub-collection and automatically generate an official offline PDF Fee Receipt.
           </p>
         </div>
 

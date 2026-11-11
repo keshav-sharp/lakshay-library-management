@@ -15,9 +15,11 @@ import {
 import firebaseConfig from '../config/firebaseConfig';
 import {
   getStoredStudents,
+  getAllStoredStudentsRaw,
   getStoredPayments,
   getStoredDailyAttendance,
   importSyncedFirestoreSnapshot,
+  createAndVerifyPhase0LocalBackup,
 } from './storageService';
 import { getStoredShifts, saveStoredShifts } from './shiftService';
 import { getStoredSeats, saveStoredSeats } from './seatService';
@@ -575,13 +577,12 @@ export const copyTextToClipboard = async (text: string): Promise<boolean> => {
 
 /**
  * Builds the live MasterSyncPayload from the device's current local storage.
+ * Includes both active and archived students plus all preserved historical payments.
  */
 export const buildCurrentMasterSyncPayload = (): MasterSyncPayload => {
   const config = getGoogleDriveSyncConfig();
   const now = new Date();
   const dateKey = now.toISOString().split('T')[0];
-  const cleanDeviceId = (config.deviceId || 'default').replace(/[^a-zA-Z0-9]/g, '');
-  const syncChannelTopic = config.masterSyncChannelTopic || `lakshay_ch_${cleanDeviceId}`;
 
   return {
     schemaVersion: '2.0',
@@ -590,11 +591,9 @@ export const buildCurrentMasterSyncPayload = (): MasterSyncPayload => {
     syncDateKey: dateKey,
     primaryDeviceId: config.deviceId,
     primaryDeviceName: config.deviceName,
-    syncChannelTopic,
-    masterSyncKey: config.masterSyncKey || undefined,
     folderPath: `${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME}`,
     data: {
-      students: getStoredStudents(),
+      students: getAllStoredStudentsRaw(),
       payments: getStoredPayments(),
       dailyAttendance: getStoredDailyAttendance(),
       shifts: getStoredShifts(),
@@ -605,20 +604,19 @@ export const buildCurrentMasterSyncPayload = (): MasterSyncPayload => {
 };
 
 /**
- * Triggers an immediate debounced auto-sync to Cloud Relay & Google Drive when new data is entered
- * on ANY active device (Primary, Secondary, or third consecutive device).
- * Runs seamlessly in the background without blocking the UI.
+ * PHASE 0 SECURITY CONTAINMENT:
+ * Triggers a debounced auto-sync strictly to authenticated Google Drive when new data is entered
+ * on the Primary device. Public `ntfy.sh` relay broadcasting is permanently disabled.
  */
 let autoSyncTimeout: ReturnType<typeof setTimeout> | null = null;
 let isAutoSyncing = false;
 
 export const triggerLiveAutoSync = (delayMs: number = 800) => {
   const config = getGoogleDriveSyncConfig();
-  const cleanDeviceId = (config.deviceId || 'default').replace(/[^a-zA-Z0-9]/g, '');
-  const topic =
-    config.masterSyncChannelTopic ||
-    (config.deviceRole === 'PRIMARY' ? `lakshay_ch_${cleanDeviceId}` : null);
-  if (!topic) return;
+  const token = getDriveAccessToken();
+  if (!token || !config.autoDailySyncEnabled || config.deviceRole !== 'PRIMARY') {
+    return;
+  }
 
   if (autoSyncTimeout) {
     clearTimeout(autoSyncTimeout);
@@ -628,13 +626,9 @@ export const triggerLiveAutoSync = (delayMs: number = 800) => {
     if (isAutoSyncing) return;
     try {
       isAutoSyncing = true;
-      // 1. Immediately publish to the instant Cloud Relay on the shared channel
-      await publishMasterSnapshotToSyncKeyRelay();
-
-      // 2. If Google Drive access token is available in memory on this device, also push snapshot to Google Drive
-      const token = getDriveAccessToken();
-      if (token && config.autoDailySyncEnabled) {
-        await pushPrimarySnapshotToGoogleDrive(token, config.lastDriveFileId).catch(() => {});
+      const activeToken = getDriveAccessToken();
+      if (activeToken && config.autoDailySyncEnabled && config.deviceRole === 'PRIMARY') {
+        await pushPrimarySnapshotToGoogleDrive(activeToken, config.lastDriveFileId).catch(() => {});
       }
     } catch {
       // Non-fatal background sync
@@ -649,9 +643,10 @@ export const triggerLivePrimaryAutoSync = triggerLiveAutoSync;
 /**
  * Generates a 100% self-contained, offline-capable Sync Code (`LKSYNC1:...`)
  * that embeds all student, seat, shift, payment, and attendance records directly
- * inside the string so it can be pasted on a Secondary Phone with zero server dependencies.
+ * inside the string so it can be transferred manually with zero external relay servers.
  */
 export const generateOfflineSyncPackageKey = (): string => {
+  createAndVerifyPhase0LocalBackup(false);
   const payload = buildCurrentMasterSyncPayload();
   // Strip bulky base64 camera images only in the compact clipboard string to keep it WhatsApp-friendly
   const compactPayload: MasterSyncPayload = {
@@ -712,27 +707,19 @@ export const decodeOfflineSyncPackageKey = (input?: string | null): MasterSyncPa
 };
 
 /**
- * Extracts a 12-character Cloud Relay File ID from a `LK-XXXXXXXXXXXX` Sync Key
- * (or `https://ntfy.sh/file/XXXXXXXXXXXX.json` URL or bare 12-char relay ID).
+ * Detects if a user pasted a legacy `LK-XXXXXXXXXXXX` Sync Key so the app can display
+ * a clear Phase 0 Security Containment notice instead of contacting `ntfy.sh`.
  */
 export const extractRelayFileIdFromSyncKey = (input?: string | null): string | null => {
   if (!input) return null;
   const trimmed = input.trim();
   if (!trimmed || trimmed.includes('LKSYNC1:')) return null;
 
-  // Match explicit `LK-<id>` anywhere in the pasted text (e.g. if copied with surrounding WhatsApp text)
   const lkMatch = trimmed.match(/LK-([a-zA-Z0-9]{10,16})/);
   if (lkMatch?.[1]) {
     return lkMatch[1];
   }
 
-  // Match full relay URL `https://ntfy.sh/file/<id>.json`
-  const urlMatch = trimmed.match(/ntfy\.sh\/file\/([a-zA-Z0-9]{10,16})(?:\.json)?/);
-  if (urlMatch?.[1]) {
-    return urlMatch[1];
-  }
-
-  // Match bare 12-char alphanumeric relay ID (note: Google Drive IDs are 28-44 chars)
   if (/^[a-zA-Z0-9]{11,14}$/.test(trimmed)) {
     return trimmed;
   }
@@ -761,9 +748,11 @@ export const extractDriveIdFromInput = (input?: string | null): string | null =>
 };
 
 /**
- * Publishes the Primary Phone's current database snapshot to the CORS-enabled Cloud Sync Relay
- * (`ntfy.sh`) and returns a short 15-character Master Sync Key (`LK-XXXXXXXXXXXX`).
- * Works WITH or WITHOUT Google Drive Sign-In and completely bypasses Google OAuth Error 403!
+ * PHASE 0 SECURITY CONTAINMENT:
+ * Public `ntfy.sh` relay publishing has been permanently disabled to stop broadcasting
+ * student PII and payment records over unauthenticated public topics.
+ * Calling this function now verifies local backup protection and throws an explicit
+ * containment error so callers fall back to authenticated Google Drive or offline `LKSYNC1:...`.
  */
 export const publishMasterSnapshotToSyncKeyRelay = async (): Promise<{
   syncKey: string;
@@ -771,64 +760,10 @@ export const publishMasterSnapshotToSyncKeyRelay = async (): Promise<{
   syncedAt: string;
   studentCount: number;
 }> => {
-  const config = getGoogleDriveSyncConfig();
-  const payload = buildCurrentMasterSyncPayload();
-  const topic =
-    payload.syncChannelTopic ||
-    `lakshay_ch_${(config.deviceId || 'primary').replace(/[^a-zA-Z0-9]/g, '')}`;
-
-  const putRes = await fetch(`https://ntfy.sh/${topic}`, {
-    method: 'PUT',
-    headers: {
-      Filename: MASTER_DRIVE_BACKUP_FILENAME,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!putRes.ok) {
-    throw new Error(`Cloud Sync Key relay returned HTTP ${putRes.status}`);
-  }
-
-  const putMeta = (await putRes.json()) as { id?: string; attachment?: { url?: string } };
-  const relayFileId = putMeta.id;
-  if (!relayFileId) {
-    throw new Error('Failed to generate Sync Key ID from Cloud Relay.');
-  }
-
-  const syncKey = `LK-${relayFileId}`;
-  const nowISO = payload.syncedAt;
-  const dateKey = payload.syncDateKey;
-
-  // If this Primary phone previously had a Google Drive File ID, also publish a bridge pointer
-  // so any Secondary phone that pasted the older Drive File ID automatically resolves the new Sync Key!
-  if (config.lastDriveFileId && /^[a-zA-Z0-9_-]{20,}$/.test(config.lastDriveFileId)) {
-    const bridgeTopic = `lakshay_gdrive_${config.lastDriveFileId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 40)}`;
-    fetch(`https://ntfy.sh/${bridgeTopic}`, {
-      method: 'PUT',
-      headers: { Filename: MASTER_DRIVE_BACKUP_FILENAME },
-      body: JSON.stringify({ ...payload, masterSyncKey: syncKey }),
-    }).catch(() => {
-      // Non-fatal background bridge
-    });
-  }
-
-  const latestConfig = getGoogleDriveSyncConfig();
-  saveGoogleDriveSyncConfig({
-    ...latestConfig,
-    masterSyncKey: syncKey,
-    masterSyncChannelTopic: topic,
-    lastSyncedDateKey: latestConfig.lastSyncedDateKey || dateKey,
-    lastSyncedAtISO: latestConfig.lastSyncedAtISO || nowISO,
-    lastPrimaryWriterName: latestConfig.deviceName,
-    lastSyncedStudentCount: payload.data.students.length,
-  });
-
-  return {
-    syncKey,
-    fileId: relayFileId,
-    syncedAt: nowISO,
-    studentCount: payload.data.students.length,
-  };
+  createAndVerifyPhase0LocalBackup(false);
+  throw new Error(
+    'PHASE0_RELAY_DISABLED: Sync Key Only (LK-...) via public ntfy.sh relay has been disabled to protect student and payment data privacy. Use authenticated Google Drive Sync or Offline Sync Package (LKSYNC1:...).'
+  );
 };
 
 /**
@@ -846,6 +781,9 @@ export const applyMasterSyncPayloadLocally = (
   if (!payload?.data?.students || !Array.isArray(payload.data.students)) {
     throw new Error('Invalid master sync snapshot format.');
   }
+
+  // Ensure local backup is verified before applying remote snapshot
+  createAndVerifyPhase0LocalBackup(false);
 
   importSyncedFirestoreSnapshot(
     payload.data.students,
@@ -871,6 +809,7 @@ export const applyMasterSyncPayloadLocally = (
   const now = new Date();
   const dateKey = now.toISOString().split('T')[0];
   const config = getGoogleDriveSyncConfig();
+  const activeCount = getStoredStudents().length;
 
   saveGoogleDriveSyncConfig({
     ...config,
@@ -878,137 +817,823 @@ export const applyMasterSyncPayloadLocally = (
     lastSyncedAtISO: now.toISOString(),
     lastDriveFileId: sourceFileOrKeyId,
     lastPrimaryWriterName: payload.primaryDeviceName || 'Primary Phone',
-    lastSyncedStudentCount: payload.data.students.length,
-    masterSyncChannelTopic: payload.syncChannelTopic || config.masterSyncChannelTopic || null,
+    lastSyncedStudentCount: activeCount,
   });
 
   return {
     fileId: sourceFileOrKeyId,
     primaryDeviceName: payload.primaryDeviceName || 'Primary Phone',
     syncedAt: payload.syncedAt || now.toISOString(),
-    studentCount: payload.data.students.length,
+    studentCount: activeCount,
   };
 };
 
 /**
- * Checks the live Cloud Relay channel for any newer snapshot published by any peer device
- * (Primary, Secondary, or third consecutive device).
- * If found and authored by another device with a newer timestamp, it downloads and applies it locally right away.
- * Returns { synced: true, ... } if new peer data was applied, or { synced: false } if already up-to-date.
+ * PHASE 0 SECURITY CONTAINMENT:
+ * Public `ntfy.sh` relay polling is permanently disabled.
+ * Immediately returns `{ synced: false }` with zero network requests.
  */
-let isCheckingLiveRelay = false;
 export const checkAndApplyLiveRelaySync = async (): Promise<{
   synced: boolean;
   studentCount?: number;
   primaryDeviceName?: string;
   syncedAt?: string;
 }> => {
-  const config = getGoogleDriveSyncConfig();
-  const cleanDeviceId = (config.deviceId || 'default').replace(/[^a-zA-Z0-9]/g, '');
-  const topic =
-    config.masterSyncChannelTopic ||
-    (config.deviceRole === 'PRIMARY' ? `lakshay_ch_${cleanDeviceId}` : null);
-
-  if (!topic) {
-    return { synced: false };
-  }
-  if (isCheckingLiveRelay) return { synced: false };
-
-  try {
-    isCheckingLiveRelay = true;
-    const pollRes = await fetch(
-      `https://ntfy.sh/${topic}/json?poll=1&since=1h`
-    );
-    if (!pollRes.ok) return { synced: false };
-    const text = (await pollRes.text()).trim();
-    if (!text) return { synced: false };
-
-    const lines = text
-      .split('\n')
-      .filter(Boolean)
-      .map((l) => {
-        try {
-          return JSON.parse(l) as { id?: string; attachment?: { url?: string }; time?: number };
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean) as { id?: string; attachment?: { url?: string }; time?: number }[];
-
-    const newestMsg = [...lines].reverse().find((m) => m.id && m.attachment?.url);
-    if (!newestMsg?.id) return { synced: false };
-
-    const candidateFileId = `LK-${newestMsg.id}`;
-    if (config.lastDriveFileId === candidateFileId) {
-      // Already at this exact snapshot
-      return { synced: false };
-    }
-
-    const newerFileRes = await fetch(`https://ntfy.sh/file/${newestMsg.id}.json`);
-    if (!newerFileRes.ok) return { synced: false };
-
-    const newerPayload = (await newerFileRes.json()) as MasterSyncPayload;
-    if (!newerPayload?.data?.students) return { synced: false };
-
-    // Ignore snapshots authored by this device itself to prevent self-echoes
-    if (newerPayload.primaryDeviceId === config.deviceId) {
-      return { synced: false };
-    }
-
-    // If payload has a syncedAt, compare with local lastSyncedAtISO
-    if (config.lastSyncedAtISO && newerPayload.syncedAt) {
-      const lastTime = new Date(config.lastSyncedAtISO).getTime();
-      const payloadTime = new Date(newerPayload.syncedAt).getTime();
-      if (payloadTime <= lastTime) {
-        return { synced: false };
-      }
-    }
-
-    const result = applyMasterSyncPayloadLocally(newerPayload, candidateFileId);
-    return {
-      synced: true,
-      studentCount: result.studentCount,
-      primaryDeviceName: result.primaryDeviceName,
-      syncedAt: result.syncedAt,
-    };
-  } catch {
-    return { synced: false };
-  } finally {
-    isCheckingLiveRelay = false;
-  }
+  return { synced: false };
 };
 
 /**
- * Enables link-based read permission (`type: 'anyone', role: 'reader'`) on a Drive file or folder.
+ * PHASE 0 SECURITY CONTAINMENT:
+ * Public `type: 'anyone'` permission creation is permanently disabled.
+ * Kept as a strict no-op so no caller can ever make a Google Drive file or folder world-readable.
  */
 export const enableAnyoneReaderPermission = async (
-  accessToken: string,
-  fileOrFolderId: string
+  _accessToken: string,
+  _fileOrFolderId: string
 ): Promise<void> => {
+  return;
+};
+
+export const PHASE0_DRIVE_PERMISSION_AUDIT_KEY = 'lakshay_library_phase0_drive_permission_audit_v1';
+export const PHASE0_DRIVE_SAFETY_BACKUP_FILENAME = 'Lakshay_Library_Phase0_PreContainment_Backup.json';
+
+export interface DriveEffectivePermissionItem {
+  id: string;
+  type: string;
+  role: string;
+  emailAddress?: string;
+  domain?: string;
+  displayName?: string;
+  inherited: boolean;
+  inheritedFrom?: string;
+}
+
+export interface DriveFlaggedPermissionItem {
+  resourceId: string;
+  resourceName: string;
+  permissionId: string;
+  type: string;
+  role: string;
+  emailAddress?: string;
+  domain?: string;
+  displayName?: string;
+  inherited: boolean;
+  inheritedFrom?: string;
+  impactDescription: string;
+  requiresExplicitApproval: true;
+}
+
+export interface DriveResourcePermissionAudit {
+  id: string;
+  name: string;
+  resourceType: 'ROOT_FOLDER' | 'SUBFOLDER' | 'FILE';
+  revokedPermissionIds: string[];
+  inheritedPublicFromIds: string[];
+  effectivePermissions: DriveEffectivePermissionItem[];
+  hasPublicAnyoneAccess: boolean;
+  sharedFlag: boolean;
+}
+
+export interface DriveUnverifiedResourceItem {
+  idOrName: string;
+  resourceType: 'ROOT_FOLDER' | 'SUBFOLDER' | 'FILE' | 'CONFIGURED_ID';
+  httpStatus?: number;
+  reason: string;
+}
+
+export interface DrivePermissionVerificationReport {
+  verifiedAtISO: string;
+  mode: 'AUDIT_ONLY' | 'AUTHORIZED_REVOKE_PUBLIC';
+  oauthScope: string;
+  paginationVerified: boolean;
+  overallStatus:
+    | 'VERIFIED_PRIVATE'
+    | 'PUBLIC_ACCESS_REMAINING'
+    | 'UNVERIFIED_INACCESSIBLE_RESOURCES'
+    | 'ERROR';
+  localBackupVerified: boolean;
+  driveBackupVerified: boolean;
+  driveSafetyBackupFileId: string | null;
+  driveSafetyBackupPreservedExisting: boolean;
+  totalResourcesDiscovered: number;
+  totalResourcesInspected: number;
+  totalPublicPermissionsDetected: number;
+  totalPublicPermissionsRevoked: number;
+  unverifiedResources: DriveUnverifiedResourceItem[];
+  flaggedDomainOrStaffPermissions: DriveFlaggedPermissionItem[];
+  resources: DriveResourcePermissionAudit[];
+  errorMessage?: string;
+}
+
+export const getStoredDrivePermissionAuditReport = (): DrivePermissionVerificationReport | null => {
   try {
-    await fetch(
-      `https://www.googleapis.com/drive/v3/files/${fileOrFolderId}/permissions?supportsAllDrives=true`,
+    const raw = localStorage.getItem(PHASE0_DRIVE_PERMISSION_AUDIT_KEY);
+    return raw ? (JSON.parse(raw) as DrivePermissionVerificationReport) : null;
+  } catch {
+    return null;
+  }
+};
+
+interface RawDrivePermission {
+  id: string;
+  type: string;
+  role: string;
+  emailAddress?: string;
+  domain?: string;
+  displayName?: string;
+  deleted?: boolean;
+  permissionDetails?: Array<{
+    permissionType?: string;
+    role?: string;
+    inherited?: boolean;
+    inheritedFrom?: string;
+  }>;
+}
+
+/**
+ * Helper: Enumerates all matching files/folders across all pages using `nextPageToken`.
+ */
+const listDriveFilesPaginated = async (
+  accessToken: string,
+  rawQuery: string
+): Promise<{
+  ok: boolean;
+  httpStatus: number;
+  files: Array<{ id: string; name: string; mimeType: string }>;
+  pagesFetched: number;
+}> => {
+  const allFiles: Array<{ id: string; name: string; mimeType: string }> = [];
+  let pageToken: string | undefined = undefined;
+  let pagesFetched = 0;
+
+  do {
+    const tokenParam = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
+    const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
+      rawQuery
+    )}&spaces=drive&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=nextPageToken,files(id,name,mimeType)&pageSize=100${tokenParam}`;
+
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    pagesFetched++;
+
+    if (!res.ok) {
+      return { ok: false, httpStatus: res.status, files: allFiles, pagesFetched };
+    }
+
+    const data = (await res.json()) as {
+      nextPageToken?: string;
+      files?: Array<{ id: string; name: string; mimeType: string }>;
+    };
+    if (Array.isArray(data.files)) {
+      allFiles.push(...data.files);
+    }
+    pageToken = data.nextPageToken || undefined;
+  } while (pageToken && pagesFetched < 50);
+
+  return { ok: true, httpStatus: 200, files: allFiles, pagesFetched };
+};
+
+/**
+ * PHASE 0 MANDATORY CONDITION 1 & 5 + FINAL VERIFICATION SECTION 2:
+ * 1. Verifies local backup and creates/verifies a pre-containment safety backup of existing Google Drive data.
+ *    If `Lakshay_Library_Phase0_PreContainment_Backup.json` already exists on Drive, it is PRESERVED untouched
+ *    (never overwritten or deleted).
+ * 2. Recursively discovers and paginates (`nextPageToken`) the entire Google Drive folder and file hierarchy
+ *    top-down (`Lakshay_Library_Master` -> `Master_Sync_Backups`, `Automated_Logs`, and any nested subfolders/files).
+ * 3. Supports two explicit modes via `options?.revokePublicAnyone`:
+ *    - `AUDIT_ONLY` (`revokePublicAnyone: false`, default): Inspects direct and inherited permissions without
+ *      modifying or deleting any Drive permissions.
+ *    - `AUTHORIZED_REVOKE_PUBLIC` (`revokePublicAnyone: true`): Removes `type: 'anyone'` public permissions
+ *      at their actual source (`inheritedFrom` for inherited permissions, or `resource.id` for direct grants).
+ * 4. Preserves `type: 'domain'`, `user`, and `group` permissions untouched and reports them in
+ *    `flaggedDomainOrStaffPermissions`.
+ * 5. Tracks any inaccessible or uninspectable resources in `unverifiedResources` and NEVER claims
+ *    `VERIFIED_PRIVATE` if any relevant resource remains inaccessible or uninspected.
+ */
+export const revokeAndVerifyDrivePublicAccess = async (
+  accessToken: string,
+  options?: { revokePublicAnyone?: boolean }
+): Promise<DrivePermissionVerificationReport> => {
+  const nowISO = new Date().toISOString();
+  const revokePublicAnyone = Boolean(options?.revokePublicAnyone);
+  const mode: DrivePermissionVerificationReport['mode'] = revokePublicAnyone
+    ? 'AUTHORIZED_REVOKE_PUBLIC'
+    : 'AUDIT_ONLY';
+  const localBackupReport = createAndVerifyPhase0LocalBackup(false);
+  const unverifiedResources: DriveUnverifiedResourceItem[] = [];
+
+  if (!accessToken || accessToken === 'IDENTITY_SESSION_ACTIVE') {
+    throw new Error('AUTH_REQUIRED');
+  }
+
+  let rootFolderId = '';
+  let syncSubfolderId = '';
+  let driveBackupVerified = false;
+  let driveSafetyBackupFileId: string | null = null;
+  let driveSafetyBackupPreservedExisting = false;
+  let paginationVerified = true;
+
+  const resourcesToInspect: Array<{
+    id: string;
+    name: string;
+    resourceType: 'ROOT_FOLDER' | 'SUBFOLDER' | 'FILE';
+  }> = [];
+
+  if (revokePublicAnyone) {
+    // AUTHORIZED_REVOKE_PUBLIC mode: Ensure pre-containment safety backup exists before revoking public access
+    const hierarchy = await ensureMasterSyncFolderHierarchy(accessToken);
+    rootFolderId = hierarchy.rootFolderId;
+    syncSubfolderId = hierarchy.syncSubfolderId;
+
+    resourcesToInspect.push(
       {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          role: 'reader',
-          type: 'anyone',
-        }),
+        id: rootFolderId,
+        name: MASTER_DRIVE_ROOT_FOLDER_NAME,
+        resourceType: 'ROOT_FOLDER',
+      },
+      {
+        id: syncSubfolderId,
+        name: `${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME}`,
+        resourceType: 'SUBFOLDER',
       }
     );
-  } catch {
-    // Non-fatal if permission already exists
+
+    try {
+      const safetyList = await listDriveFilesPaginated(
+        accessToken,
+        `name = '${PHASE0_DRIVE_SAFETY_BACKUP_FILENAME}' and '${syncSubfolderId}' in parents and trashed = false`
+      );
+      const existingSafetyId = safetyList.files[0]?.id || null;
+
+      if (existingSafetyId) {
+        driveSafetyBackupFileId = existingSafetyId;
+        driveSafetyBackupPreservedExisting = true;
+        driveBackupVerified = true;
+      } else {
+        const existingMasterMeta = await findMasterSyncFileOnDrive(accessToken, null);
+        let backupContentToPreserve: MasterSyncPayload | null = null;
+
+        if (existingMasterMeta?.id) {
+          const dlRes = await fetch(
+            `https://www.googleapis.com/drive/v3/files/${existingMasterMeta.id}?alt=media&supportsAllDrives=true`,
+            {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            }
+          );
+          if (dlRes.ok) {
+            const parsedRemote = (await dlRes.json()) as MasterSyncPayload;
+            if (parsedRemote && Array.isArray(parsedRemote?.data?.students)) {
+              backupContentToPreserve = parsedRemote;
+              driveBackupVerified = true;
+            }
+          }
+        }
+
+        if (!backupContentToPreserve) {
+          backupContentToPreserve = buildCurrentMasterSyncPayload();
+          driveBackupVerified = true;
+        }
+
+        const safetyMeta = {
+          name: PHASE0_DRIVE_SAFETY_BACKUP_FILENAME,
+          mimeType: 'application/json',
+          parents: [syncSubfolderId],
+          description: `Phase 0 Pre-Containment Verified Safety Backup (${nowISO})`,
+        };
+
+        const boundary = '-------lakshay_phase0_safety_backup_boundary';
+        const delimiter = `\r\n--${boundary}\r\n`;
+        const closeDelimiter = `\r\n--${boundary}--`;
+        const multipartBody =
+          delimiter +
+          'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+          JSON.stringify(safetyMeta) +
+          delimiter +
+          'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+          JSON.stringify(backupContentToPreserve, null, 2) +
+          closeDelimiter;
+
+        const safetyUploadRes = await fetch(
+          'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': `multipart/related; boundary=${boundary}`,
+            },
+            body: multipartBody,
+          }
+        );
+
+        if (safetyUploadRes.ok) {
+          const safetyData = await safetyUploadRes.json();
+          driveSafetyBackupFileId = safetyData.id || null;
+        }
+      }
+    } catch {
+      // Continue with permission audit even if safety backup check encountered a non-fatal error
+    }
+  } else {
+    // AUDIT_ONLY (Default Read-Only Mode): Zero folder creation, zero file uploads, zero permission mutations.
+    try {
+      const rootSearch = await listDriveFilesPaginated(
+        accessToken,
+        `name = '${MASTER_DRIVE_ROOT_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
+      );
+      if (!rootSearch.ok) {
+        paginationVerified = false;
+        unverifiedResources.push({
+          idOrName: MASTER_DRIVE_ROOT_FOLDER_NAME,
+          resourceType: 'ROOT_FOLDER',
+          httpStatus: rootSearch.httpStatus,
+          reason: `Read-only lookup for root folder '${MASTER_DRIVE_ROOT_FOLDER_NAME}' failed with HTTP ${rootSearch.httpStatus}.`,
+        });
+      } else if (rootSearch.files.length === 0) {
+        unverifiedResources.push({
+          idOrName: MASTER_DRIVE_ROOT_FOLDER_NAME,
+          resourceType: 'ROOT_FOLDER',
+          reason: `Intended root folder '${MASTER_DRIVE_ROOT_FOLDER_NAME}' was not found or is inaccessible under the current OAuth token (${SCOPES[0]}).`,
+        });
+      } else {
+        rootFolderId = rootSearch.files[0].id;
+        for (const f of rootSearch.files) {
+          resourcesToInspect.push({
+            id: f.id,
+            name: f.name,
+            resourceType: 'ROOT_FOLDER',
+          });
+        }
+      }
+
+      if (rootFolderId) {
+        const subSearch = await listDriveFilesPaginated(
+          accessToken,
+          `name = '${MASTER_SYNC_SUBFOLDER_NAME}' and '${rootFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
+        );
+        if (!subSearch.ok) {
+          paginationVerified = false;
+          unverifiedResources.push({
+            idOrName: `${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME}`,
+            resourceType: 'SUBFOLDER',
+            httpStatus: subSearch.httpStatus,
+            reason: `Read-only lookup for subfolder '${MASTER_SYNC_SUBFOLDER_NAME}' failed with HTTP ${subSearch.httpStatus}.`,
+          });
+        } else if (subSearch.files.length === 0) {
+          unverifiedResources.push({
+            idOrName: `${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME}`,
+            resourceType: 'SUBFOLDER',
+            reason: `Intended subfolder '${MASTER_SYNC_SUBFOLDER_NAME}' was not found or is inaccessible inside '${MASTER_DRIVE_ROOT_FOLDER_NAME}'.`,
+          });
+        } else {
+          syncSubfolderId = subSearch.files[0].id;
+        }
+      } else {
+        unverifiedResources.push({
+          idOrName: `${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME}`,
+          resourceType: 'SUBFOLDER',
+          reason: `Cannot inspect '${MASTER_SYNC_SUBFOLDER_NAME}' because parent folder '${MASTER_DRIVE_ROOT_FOLDER_NAME}' is unverified/inaccessible.`,
+        });
+      }
+
+      if (syncSubfolderId) {
+        const safetyList = await listDriveFilesPaginated(
+          accessToken,
+          `name = '${PHASE0_DRIVE_SAFETY_BACKUP_FILENAME}' and '${syncSubfolderId}' in parents and trashed = false`
+        );
+        if (safetyList.ok && safetyList.files[0]?.id) {
+          driveSafetyBackupFileId = safetyList.files[0].id;
+          driveSafetyBackupPreservedExisting = true;
+          driveBackupVerified = true;
+        }
+      }
+    } catch (err: unknown) {
+      paginationVerified = false;
+      unverifiedResources.push({
+        idOrName: MASTER_DRIVE_ROOT_FOLDER_NAME,
+        resourceType: 'ROOT_FOLDER',
+        reason: err instanceof Error ? err.message : 'Read-only hierarchy lookup failed.',
+      });
+    }
   }
+
+  // Also discover any other `Lakshay_Library_Master` folders visible under `drive.file`
+  try {
+    const allRootMatches = await listDriveFilesPaginated(
+      accessToken,
+      `name = '${MASTER_DRIVE_ROOT_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
+    );
+    for (const f of allRootMatches.files) {
+      if (!resourcesToInspect.some((r) => r.id === f.id)) {
+        resourcesToInspect.push({
+          id: f.id,
+          name: f.name,
+          resourceType: 'ROOT_FOLDER',
+        });
+      }
+    }
+  } catch {
+    // Ignore
+  }
+
+  const seenIds = new Set<string>(resourcesToInspect.map((r) => r.id));
+  const folderQueue: Array<{ id: string; name: string }> = resourcesToInspect
+    .filter((r) => r.resourceType !== 'FILE')
+    .map((r) => ({ id: r.id, name: r.name }));
+
+  // Breadth-first recursive traversal with `nextPageToken` pagination
+  while (folderQueue.length > 0) {
+    const currentFolder = folderQueue.shift()!;
+    try {
+      const pagedChildren = await listDriveFilesPaginated(
+        accessToken,
+        `'${currentFolder.id}' in parents and trashed = false`
+      );
+      if (!pagedChildren.ok) {
+        paginationVerified = false;
+        unverifiedResources.push({
+          idOrName: `${currentFolder.name} (${currentFolder.id})`,
+          resourceType: 'SUBFOLDER',
+          httpStatus: pagedChildren.httpStatus,
+          reason: `Child enumeration failed with HTTP ${pagedChildren.httpStatus} under drive.file scope.`,
+        });
+        continue;
+      }
+
+      for (const item of pagedChildren.files) {
+        if (!seenIds.has(item.id)) {
+          seenIds.add(item.id);
+          const isFolder = item.mimeType === 'application/vnd.google-apps.folder';
+          const fullName = `${currentFolder.name}/${item.name}`;
+          resourcesToInspect.push({
+            id: item.id,
+            name: fullName,
+            resourceType: isFolder ? 'SUBFOLDER' : 'FILE',
+          });
+          if (isFolder) {
+            folderQueue.push({ id: item.id, name: fullName });
+          }
+        }
+      }
+    } catch (err: unknown) {
+      paginationVerified = false;
+      unverifiedResources.push({
+        idOrName: `${currentFolder.name} (${currentFolder.id})`,
+        resourceType: 'SUBFOLDER',
+        reason: err instanceof Error ? err.message : 'Failed to enumerate folder children.',
+      });
+    }
+  }
+
+  // Also include `lastDriveFileId` and `sharedFolderInput` if configured outside the discovered hierarchy
+  const syncConfig = getGoogleDriveSyncConfig();
+  if (
+    syncConfig.lastDriveFileId &&
+    /^[a-zA-Z0-9_-]{20,}$/.test(syncConfig.lastDriveFileId) &&
+    !seenIds.has(syncConfig.lastDriveFileId)
+  ) {
+    seenIds.add(syncConfig.lastDriveFileId);
+    resourcesToInspect.push({
+      id: syncConfig.lastDriveFileId,
+      name: `${MASTER_DRIVE_BACKUP_FILENAME} (lastDriveFileId)`,
+      resourceType: 'FILE',
+    });
+  }
+
+  const configuredSharedDriveId = extractDriveIdFromInput(syncConfig.sharedFolderInput);
+  if (configuredSharedDriveId && !seenIds.has(configuredSharedDriveId)) {
+    seenIds.add(configuredSharedDriveId);
+    resourcesToInspect.push({
+      id: configuredSharedDriveId,
+      name: `Configured Shared Resource (${configuredSharedDriveId})`,
+      resourceType: 'SUBFOLDER',
+    });
+  }
+
+  // Verify that the intended master sync file `Lakshay_Library_Master_Sync.json` is present in the discovered hierarchy
+  const hasMasterSyncFileInHierarchy = resourcesToInspect.some(
+    (r) => r.resourceType === 'FILE' && r.name.includes(MASTER_DRIVE_BACKUP_FILENAME)
+  );
+  if (!hasMasterSyncFileInHierarchy) {
+    unverifiedResources.push({
+      idOrName: `${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME}/${MASTER_DRIVE_BACKUP_FILENAME}`,
+      resourceType: 'FILE',
+      reason: `Intended master sync file '${MASTER_DRIVE_BACKUP_FILENAME}' was not found or is inaccessible under the current OAuth token (${SCOPES[0]}).`,
+    });
+  } else {
+    driveBackupVerified = true;
+  }
+
+  // Step 3: Inspect (and if `revokePublicAnyone === true`, revoke) Public (`type: 'anyone'`) Permissions.
+  // - Inherited `anyone` permissions are removed ONLY at their source (`inheritedFrom`), deduplicated across ancestors.
+  // - Direct `anyone` permissions are removed on the resource itself.
+  // - `domain`, `user`, and `group` permissions (non-owner) are NOT revoked automatically; they are flagged for explicit user approval.
+  let totalPublicPermissionsDetected = 0;
+  let totalPublicPermissionsRevoked = 0;
+  const revokedByResourceId = new Map<string, string[]>();
+  const inheritedSourcesByResourceId = new Map<string, string[]>();
+  const revokedSourceTargetKeys = new Set<string>();
+  const flaggedDomainOrStaffPermissions: DriveFlaggedPermissionItem[] = [];
+
+  for (const resource of resourcesToInspect) {
+    const revokedIds: string[] = [];
+    const inheritedFromIds: string[] = [];
+
+    try {
+      const permListUrl = `https://www.googleapis.com/drive/v3/files/${resource.id}/permissions?supportsAllDrives=true&fields=permissions(id,type,role,emailAddress,domain,displayName,deleted,permissionDetails(permissionType,role,inherited,inheritedFrom))`;
+      const permListRes = await fetch(permListUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (!permListRes.ok) {
+        unverifiedResources.push({
+          idOrName: `${resource.name} (${resource.id})`,
+          resourceType: resource.resourceType,
+          httpStatus: permListRes.status,
+          reason: `permissions.list returned HTTP ${permListRes.status} (resource may have been created outside this OAuth client's drive.file scope or owned by another account).`,
+        });
+        continue;
+      }
+
+      const permListData = (await permListRes.json()) as { permissions?: RawDrivePermission[] };
+      const permissions = permListData.permissions || [];
+
+      for (const perm of permissions) {
+        if (perm.deleted) continue;
+
+        const isPublicAnyone =
+          perm.type === 'anyone' ||
+          perm.id === 'anyoneWithLink' ||
+          perm.id === 'anyone';
+
+        const details = perm.permissionDetails || [];
+        const inheritedDetails = details.filter((d) => d.inherited && d.inheritedFrom);
+        const hasDirectGrant =
+          details.length === 0 || details.some((d) => !d.inherited);
+
+        if (isPublicAnyone) {
+          totalPublicPermissionsDetected++;
+
+          for (const detail of inheritedDetails) {
+            if (detail.inheritedFrom) {
+              inheritedFromIds.push(detail.inheritedFrom);
+            }
+          }
+
+          if (revokePublicAnyone) {
+            // 1. If inherited from an ancestor folder, remove ONLY at the ancestor source (`inheritedFrom`)
+            for (const detail of inheritedDetails) {
+              if (detail.inheritedFrom) {
+                const sourceKey = `${detail.inheritedFrom}::${perm.id}`;
+                if (!revokedSourceTargetKeys.has(sourceKey)) {
+                  revokedSourceTargetKeys.add(sourceKey);
+                  try {
+                    const ancestorDelRes = await fetch(
+                      `https://www.googleapis.com/drive/v3/files/${detail.inheritedFrom}/permissions/${perm.id}?supportsAllDrives=true`,
+                      {
+                        method: 'DELETE',
+                        headers: { Authorization: `Bearer ${accessToken}` },
+                      }
+                    );
+                    if (ancestorDelRes.ok || ancestorDelRes.status === 204) {
+                      revokedIds.push(`${perm.id}@source:${detail.inheritedFrom}`);
+                      totalPublicPermissionsRevoked++;
+                    } else {
+                      unverifiedResources.push({
+                        idOrName: `Inherited Source Folder (${detail.inheritedFrom})`,
+                        resourceType: 'ROOT_FOLDER',
+                        httpStatus: ancestorDelRes.status,
+                        reason: `Could not revoke inherited public permission '${perm.id}' at source folder '${detail.inheritedFrom}' (HTTP ${ancestorDelRes.status}).`,
+                      });
+                    }
+                  } catch {
+                    unverifiedResources.push({
+                      idOrName: `Inherited Source Folder (${detail.inheritedFrom})`,
+                      resourceType: 'ROOT_FOLDER',
+                      reason: `Network/API error revoking inherited public permission at source '${detail.inheritedFrom}'.`,
+                    });
+                  }
+                } else {
+                  revokedIds.push(`${perm.id}@source:${detail.inheritedFrom}`);
+                }
+              }
+            }
+
+            // 2. Only issue DELETE on `resource.id` if the permission is directly attached to this resource (not purely inherited)
+            if (hasDirectGrant) {
+              const directKey = `${resource.id}::${perm.id}`;
+              if (!revokedSourceTargetKeys.has(directKey)) {
+                revokedSourceTargetKeys.add(directKey);
+                try {
+                  const delRes = await fetch(
+                    `https://www.googleapis.com/drive/v3/files/${resource.id}/permissions/${perm.id}?supportsAllDrives=true`,
+                    {
+                      method: 'DELETE',
+                      headers: { Authorization: `Bearer ${accessToken}` },
+                    }
+                  );
+                  if (delRes.ok || delRes.status === 204) {
+                    revokedIds.push(perm.id);
+                    totalPublicPermissionsRevoked++;
+                  } else {
+                    unverifiedResources.push({
+                      idOrName: `${resource.name} (${resource.id})`,
+                      resourceType: resource.resourceType,
+                      httpStatus: delRes.status,
+                      reason: `Could not delete direct public permission '${perm.id}' on '${resource.name}' (HTTP ${delRes.status}).`,
+                    });
+                  }
+                } catch {
+                  unverifiedResources.push({
+                    idOrName: `${resource.name} (${resource.id})`,
+                    resourceType: resource.resourceType,
+                    reason: `Network/API error deleting direct public permission on '${resource.name}'.`,
+                  });
+                }
+              }
+            }
+          }
+        } else if (perm.role !== 'owner') {
+          // Do NOT revoke domain-wide or legitimate staff (`user` / `group`) permissions without explicit approval
+          const inheritedDetail = inheritedDetails[0];
+          const impactDescription =
+            perm.type === 'domain'
+              ? `Domain-wide ${perm.role} access for '${perm.domain || perm.displayName || 'organization'}'. Revoking this will block users in that Google Workspace domain unless explicitly shared.`
+              : `Named ${perm.type} (${perm.emailAddress || perm.displayName || perm.id}) has '${perm.role}' access. Revoking this will disconnect this staff/secondary device from shared-folder Drive sync.`;
+
+          flaggedDomainOrStaffPermissions.push({
+            resourceId: resource.id,
+            resourceName: resource.name,
+            permissionId: perm.id,
+            type: perm.type,
+            role: perm.role,
+            emailAddress: perm.emailAddress,
+            domain: perm.domain,
+            displayName: perm.displayName,
+            inherited: Boolean(inheritedDetail?.inherited),
+            inheritedFrom: inheritedDetail?.inheritedFrom,
+            impactDescription,
+            requiresExplicitApproval: true,
+          });
+        }
+      }
+    } catch (err: unknown) {
+      unverifiedResources.push({
+        idOrName: `${resource.name} (${resource.id})`,
+        resourceType: resource.resourceType,
+        reason: err instanceof Error ? err.message : 'Permission inspection failed.',
+      });
+    }
+
+    revokedByResourceId.set(resource.id, revokedIds);
+    inheritedSourcesByResourceId.set(resource.id, inheritedFromIds);
+  }
+
+  // Step 4: Re-Query Every Resource to Verify Effective Access Permissions
+  const auditedResources: DriveResourcePermissionAudit[] = [];
+  let anyPublicRemaining = false;
+
+  for (const resource of resourcesToInspect) {
+    try {
+      const verifyUrl = `https://www.googleapis.com/drive/v3/files/${resource.id}?supportsAllDrives=true&fields=id,name,shared,permissions(id,type,role,emailAddress,domain,displayName,deleted,permissionDetails(permissionType,role,inherited,inheritedFrom))`;
+      const verifyRes = await fetch(verifyUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (!verifyRes.ok) {
+        if (!unverifiedResources.some((u) => u.idOrName.includes(resource.id))) {
+          unverifiedResources.push({
+            idOrName: `${resource.name} (${resource.id})`,
+            resourceType: resource.resourceType,
+            httpStatus: verifyRes.status,
+            reason: `Verification files.get returned HTTP ${verifyRes.status}.`,
+          });
+        }
+        continue;
+      }
+
+      const verifyData = (await verifyRes.json()) as {
+        id: string;
+        name: string;
+        shared?: boolean;
+        permissions?: RawDrivePermission[];
+      };
+
+      if (!Array.isArray(verifyData.permissions)) {
+        unverifiedResources.push({
+          idOrName: `${resource.name} (${resource.id})`,
+          resourceType: resource.resourceType,
+          reason:
+            'Google Drive API response omitted the `permissions` list (insufficient permission to inspect ACLs on this item).',
+        });
+        continue;
+      }
+
+      const effectivePermissions: DriveEffectivePermissionItem[] = verifyData.permissions
+        .filter((p) => !p.deleted)
+        .map((p) => {
+          const inheritedDetail = (p.permissionDetails || []).find((d) => d.inherited);
+          return {
+            id: p.id,
+            type: p.type,
+            role: p.role,
+            emailAddress: p.emailAddress,
+            domain: p.domain,
+            displayName: p.displayName,
+            inherited: Boolean(inheritedDetail?.inherited),
+            inheritedFrom: inheritedDetail?.inheritedFrom,
+          };
+        });
+
+      const hasPublicAnyoneAccess = effectivePermissions.some(
+        (p) =>
+          p.type === 'anyone' ||
+          p.id === 'anyoneWithLink' ||
+          p.id === 'anyone'
+      );
+
+      if (hasPublicAnyoneAccess) {
+        anyPublicRemaining = true;
+      }
+
+      auditedResources.push({
+        id: resource.id,
+        name: resource.name,
+        resourceType: resource.resourceType,
+        revokedPermissionIds: revokedByResourceId.get(resource.id) || [],
+        inheritedPublicFromIds: inheritedSourcesByResourceId.get(resource.id) || [],
+        effectivePermissions,
+        hasPublicAnyoneAccess,
+        sharedFlag: Boolean(verifyData.shared),
+      });
+    } catch (err: unknown) {
+      if (!unverifiedResources.some((u) => u.idOrName.includes(resource.id))) {
+        unverifiedResources.push({
+          idOrName: `${resource.name} (${resource.id})`,
+          resourceType: resource.resourceType,
+          reason: err instanceof Error ? err.message : 'Verification request failed.',
+        });
+      }
+    }
+  }
+
+  // Never claim VERIFIED_PRIVATE if the intended folder hierarchy (`Lakshay_Library_Master`, `Master_Sync_Backups`, `Lakshay_Library_Master_Sync.json`)
+  // was not fully inspected or if any resource remains inaccessible/uninspected or has public access remaining
+  const inspectedRootFolder = auditedResources.some((r) => r.resourceType === 'ROOT_FOLDER');
+  const inspectedSyncSubfolder = auditedResources.some(
+    (r) => r.resourceType === 'SUBFOLDER' && r.name.includes(MASTER_SYNC_SUBFOLDER_NAME)
+  );
+  const inspectedMasterSyncFile = auditedResources.some(
+    (r) => r.resourceType === 'FILE' && r.name.includes(MASTER_DRIVE_BACKUP_FILENAME)
+  );
+  const intendedHierarchyFullyInspected =
+    inspectedRootFolder && inspectedSyncSubfolder && inspectedMasterSyncFile;
+
+  const hasUnverifiedResources =
+    !intendedHierarchyFullyInspected ||
+    unverifiedResources.length > 0 ||
+    auditedResources.length === 0 ||
+    auditedResources.length < resourcesToInspect.length;
+
+  const overallStatus: DrivePermissionVerificationReport['overallStatus'] = anyPublicRemaining
+    ? 'PUBLIC_ACCESS_REMAINING'
+    : hasUnverifiedResources
+    ? 'UNVERIFIED_INACCESSIBLE_RESOURCES'
+    : 'VERIFIED_PRIVATE';
+
+  const report: DrivePermissionVerificationReport = {
+    verifiedAtISO: nowISO,
+    mode,
+    oauthScope: SCOPES[0],
+    paginationVerified,
+    overallStatus,
+    localBackupVerified: localBackupReport.verified,
+    driveBackupVerified,
+    driveSafetyBackupFileId,
+    driveSafetyBackupPreservedExisting,
+    totalResourcesDiscovered: resourcesToInspect.length,
+    totalResourcesInspected: auditedResources.length,
+    totalPublicPermissionsDetected,
+    totalPublicPermissionsRevoked,
+    unverifiedResources,
+    flaggedDomainOrStaffPermissions,
+    resources: auditedResources,
+  };
+
+  try {
+    localStorage.setItem(PHASE0_DRIVE_PERMISSION_AUDIT_KEY, JSON.stringify(report));
+  } catch {
+    // Ignore storage error
+  }
+
+  return report;
 };
 
 /**
  * PRIMARY DEVICE HELPER: Grants read-only permission on the `Lakshay_Library_Master`
  * root folder, `Master_Sync_Backups` subfolder, and `Lakshay_Library_Master_Sync.json` file
- * to another Google account email AND enables Sync Key reader access.
+ * to a specific named Google account email ONLY (`type: 'user'`).
+ * Never grants `type: 'anyone'` public permissions.
  */
 export const shareMasterFolderWithEmail = async (
   accessToken: string,
@@ -1022,12 +1647,11 @@ export const shareMasterFolderWithEmail = async (
   const { rootFolderId, syncSubfolderId } = await ensureMasterSyncFolderHierarchy(accessToken);
   const config = getGoogleDriveSyncConfig();
   const idsToShare = [rootFolderId, syncSubfolderId];
-  if (config.lastDriveFileId) {
+  if (config.lastDriveFileId && /^[a-zA-Z0-9_-]{20,}$/.test(config.lastDriveFileId)) {
     idsToShare.push(config.lastDriveFileId);
   }
 
   for (const id of idsToShare) {
-    await enableAnyoneReaderPermission(accessToken, id);
     const permRes = await fetch(
       `https://www.googleapis.com/drive/v3/files/${id}/permissions?sendNotificationEmail=false&supportsAllDrives=true`,
       {
@@ -1070,8 +1694,7 @@ export const shareMasterFolderWithEmail = async (
 /**
  * Searches for `Lakshay_Library_Master_Sync.json` via:
  * 1. Pasted Offline Sync Code (`LKSYNC1:...`)
- * 2. Pasted Master Sync Key (`LK-XXXXXXXXXXXX` via Cloud Relay)
- * 3. Google Drive API v3 (for Same-Gmail or Shared Folder Link with Drive OAuth)
+ * 2. Authenticated Google Drive API v3 (OAuth Bearer token required; zero public `ntfy.sh` or API-key-only calls)
  */
 export const findMasterSyncFileOnDrive = async (
   accessToken?: string | null,
@@ -1081,77 +1704,31 @@ export const findMasterSyncFileOnDrive = async (
   const rawInput =
     overrideSyncKeyInput !== undefined ? overrideSyncKeyInput : config.sharedFolderInput;
 
-  // 1a. Check if the user pasted a self-contained Offline Sync Code (`LKSYNC1:...`)
+  // 1. Check if the user pasted a self-contained Offline Sync Code (`LKSYNC1:...`)
   const decodedOffline = decodeOfflineSyncPackageKey(rawInput);
   if (decodedOffline) {
     return {
       id: 'LKSYNC1-OFFLINE',
       name: MASTER_DRIVE_BACKUP_FILENAME,
       modifiedTime: decodedOffline.syncedAt || new Date().toISOString(),
-      folderPath: `Offline Sync Key from ${decodedOffline.primaryDeviceName || 'Primary Phone'} (${decodedOffline.data.students.length} students)`,
+      folderPath: `Offline Sync Package from ${decodedOffline.primaryDeviceName || 'Primary Phone'} (${decodedOffline.data.students.length} students)`,
     };
   }
 
-  // 1b. Check if the user pasted a `LK-XXXXXXXXXXXX` Cloud Relay Sync Key
-  const relayFileId = extractRelayFileIdFromSyncKey(rawInput);
-  if (relayFileId) {
-    try {
-      const relayRes = await fetch(`https://ntfy.sh/file/${relayFileId}.json`);
-      if (relayRes.ok) {
-        const relayPayload = (await relayRes.json()) as MasterSyncPayload;
-        if (relayPayload?.data?.students) {
-          return {
-            id: `LK-${relayFileId}`,
-            name: MASTER_DRIVE_BACKUP_FILENAME,
-            modifiedTime: relayPayload.syncedAt || new Date().toISOString(),
-            folderPath: `Master Sync Key LK-${relayFileId} (${relayPayload.data.students.length} students from ${relayPayload.primaryDeviceName || 'Primary Phone'})`,
-          };
-        }
-      }
-    } catch {
-      // Fall through
-    }
+  const hasRealOAuthToken = Boolean(accessToken && accessToken !== 'IDENTITY_SESSION_ACTIVE');
+  if (!hasRealOAuthToken) {
+    return null;
   }
 
   const customSharedId = extractDriveIdFromInput(rawInput);
-  const hasRealOAuthToken = Boolean(accessToken && accessToken !== 'IDENTITY_SESSION_ACTIVE');
-  const apiKeyParam = firebaseConfig.apiKey ? `&key=${encodeURIComponent(firebaseConfig.apiKey)}` : '';
+  const authHeaders: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
 
-  // 2. If the Secondary user pasted a Google Drive File ID or Share Link:
+  // 2. If the user provided a specific Google Drive File ID or Folder ID:
   if (customSharedId) {
-    // 2a. Check if Primary Phone bridged this Google Drive File ID to the Cloud Sync Relay
     try {
-      const bridgeTopic = `lakshay_gdrive_${customSharedId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 40)}`;
-      const bridgePoll = await fetch(`https://ntfy.sh/${bridgeTopic}/json?poll=1&since=all`);
-      if (bridgePoll.ok) {
-        const lines = (await bridgePoll.text())
-          .trim()
-          .split('\n')
-          .filter(Boolean)
-          .map((l) => JSON.parse(l) as { id?: string; attachment?: { url?: string } });
-        const latestBridge = [...lines].reverse().find((m) => m.attachment?.url || m.id);
-        if (latestBridge?.id) {
-          return {
-            id: `LK-${latestBridge.id}`,
-            name: MASTER_DRIVE_BACKUP_FILENAME,
-            modifiedTime: new Date().toISOString(),
-            folderPath: `Bridged Sync Key (${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME})`,
-          };
-        }
-      }
-    } catch {
-      // Fall through to Google Drive lookup
-    }
-
-    const authHeaders: Record<string, string> = hasRealOAuthToken
-      ? { Authorization: `Bearer ${accessToken}` }
-      : {};
-
-    // 2b. Check if customSharedId is directly accessible via Google Drive API
-    try {
-      const directFileUrl = `https://www.googleapis.com/drive/v3/files/${customSharedId}?supportsAllDrives=true&fields=id,name,mimeType,modifiedTime,size,trashed${
-        hasRealOAuthToken ? '' : apiKeyParam
-      }`;
+      const directFileUrl = `https://www.googleapis.com/drive/v3/files/${customSharedId}?supportsAllDrives=true&fields=id,name,mimeType,modifiedTime,size,trashed`;
       const directRes = await fetch(directFileUrl, { headers: authHeaders });
       if (directRes.ok) {
         const directMeta = await directRes.json();
@@ -1164,7 +1741,7 @@ export const findMasterSyncFileOnDrive = async (
             name: directMeta.name || MASTER_DRIVE_BACKUP_FILENAME,
             modifiedTime: directMeta.modifiedTime || new Date().toISOString(),
             size: directMeta.size,
-            folderPath: `Sync Key Linked (${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME})`,
+            folderPath: `Authenticated Drive File (${MASTER_DRIVE_ROOT_FOLDER_NAME}/${MASTER_SYNC_SUBFOLDER_NAME})`,
           };
         }
       }
@@ -1172,14 +1749,11 @@ export const findMasterSyncFileOnDrive = async (
       // Fall through to folder search
     }
 
-    // 2c. Otherwise treat customSharedId as a Shared Folder ID and look for `Lakshay_Library_Master_Sync.json` inside it
     try {
       const insideSharedFolderQuery = encodeURIComponent(
         `name = '${MASTER_DRIVE_BACKUP_FILENAME}' and '${customSharedId}' in parents and trashed = false`
       );
-      const sharedFolderUrl = `https://www.googleapis.com/drive/v3/files?q=${insideSharedFolderQuery}&spaces=drive&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc&pageSize=1${
-        hasRealOAuthToken ? '' : apiKeyParam
-      }`;
+      const sharedFolderUrl = `https://www.googleapis.com/drive/v3/files?q=${insideSharedFolderQuery}&spaces=drive&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc&pageSize=1`;
       const sharedRes = await fetch(sharedFolderUrl, { headers: authHeaders });
       if (sharedRes.ok) {
         const sharedData = await sharedRes.json();
@@ -1195,18 +1769,14 @@ export const findMasterSyncFileOnDrive = async (
     }
   }
 
-  if (!hasRealOAuthToken) {
-    return null;
-  }
-
-  // 3. Search across all accessible Drive files with OAuth token
+  // 3. Search across accessible Drive files with authenticated OAuth token
   const globalFileQuery = encodeURIComponent(
     `name = '${MASTER_DRIVE_BACKUP_FILENAME}' and trashed = false`
   );
   const globalSearchUrl = `https://www.googleapis.com/drive/v3/files?q=${globalFileQuery}&spaces=drive&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name,modifiedTime,size,owners)&orderBy=modifiedTime desc&pageSize=5`;
 
   const globalResponse = await fetch(globalSearchUrl, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: authHeaders,
   });
 
   if (!globalResponse.ok) {
@@ -1245,8 +1815,9 @@ export const findMasterSyncFileOnDrive = async (
 
 /**
  * PRIMARY DEVICE ONLY: Uploads or updates `Lakshay_Library_Master_Sync.json` inside
- * `Lakshay_Library_Master/Master_Sync_Backups/` on Google Drive AND publishes a fresh
- * `LK-XXXXXXXXXXXX` Master Sync Key to the Cloud Relay for Secondary Phones.
+ * `Lakshay_Library_Master/Master_Sync_Backups/` on Google Drive with private permissions.
+ * Note: Live permission audits and public permission revocation are executed ONLY when explicitly
+ * initiated by the signed-in user.
  */
 export const pushPrimarySnapshotToGoogleDrive = async (
   accessToken: string,
@@ -1258,6 +1829,7 @@ export const pushPrimarySnapshotToGoogleDrive = async (
   studentCount: number;
   folderPath: string;
 }> => {
+  createAndVerifyPhase0LocalBackup(false);
   const config = getGoogleDriveSyncConfig();
   if (config.deviceRole !== 'PRIMARY') {
     throw new Error(
@@ -1270,7 +1842,7 @@ export const pushPrimarySnapshotToGoogleDrive = async (
   const payload = buildCurrentMasterSyncPayload();
   const nowISO = payload.syncedAt;
   const dateKey = payload.syncDateKey;
-  const students = payload.data.students;
+  const activeStudentCount = payload.data.students.filter((s) => s.status !== 'archived').length;
   const folderPath = payload.folderPath;
 
   let targetFileId = existingFileId;
@@ -1333,46 +1905,30 @@ export const pushPrimarySnapshotToGoogleDrive = async (
   const resultData = await res.json();
   const savedFileId = resultData.id || targetFileId || '';
 
-  if (savedFileId) {
-    await enableAnyoneReaderPermission(accessToken, savedFileId);
-  }
-  await enableAnyoneReaderPermission(accessToken, syncSubfolderId);
-
-  // Also publish to the Cloud Sync Key Relay (`LK-XXXXXXXXXXXX`) so Secondary phones on any Gmail can pull!
-  let generatedSyncKey: string | undefined;
-  try {
-    const relayRes = await publishMasterSnapshotToSyncKeyRelay();
-    generatedSyncKey = relayRes.syncKey;
-  } catch {
-    // Non-fatal if relay is temporarily unreachable
-  }
-
   const latestConfig = getGoogleDriveSyncConfig();
   saveGoogleDriveSyncConfig({
     ...latestConfig,
     lastSyncedDateKey: dateKey,
     lastSyncedAtISO: nowISO,
     lastDriveFileId: savedFileId,
-    masterSyncKey: generatedSyncKey || latestConfig.masterSyncKey || null,
     lastPrimaryWriterName: latestConfig.deviceName,
-    lastSyncedStudentCount: students.length,
+    lastSyncedStudentCount: activeStudentCount,
   });
 
   return {
     fileId: savedFileId,
-    syncKey: generatedSyncKey,
     syncedAt: nowISO,
-    studentCount: students.length,
+    studentCount: activeStudentCount,
     folderPath,
   };
 };
 
 /**
  * SECONDARY (OR RESTORE) MODE: Downloads `Lakshay_Library_Master_Sync.json` and applies the snapshot locally.
- * Seamlessly supports:
- * 1. Method 1 Master Sync Key (`LK-XXXXXXXXXXXX` via CORS-enabled Cloud Relay — works on ANY Gmail or without sign-in!)
- * 2. Method 1 Offline Sync Package (`LKSYNC1:...` — 100% offline instant decode!)
- * 3. Google Drive API v3 (when signed into the same Gmail account or authorized Shared Folder)
+ * Supports:
+ * 1. Self-contained Offline Sync Package (`LKSYNC1:...` — 100% local decode, zero external servers)
+ * 2. Authenticated Google Drive API v3 (OAuth Bearer token required)
+ * Note: `LK-XXXXXXXXXXXX` Sync Key Only via public `ntfy.sh` relay is blocked with a clear security notice.
  */
 export const pullMasterSnapshotFromGoogleDrive = async (
   accessToken?: string | null,
@@ -1383,142 +1939,62 @@ export const pullMasterSnapshotFromGoogleDrive = async (
   syncedAt: string;
   studentCount: number;
 }> => {
+  createAndVerifyPhase0LocalBackup(false);
   const config = getGoogleDriveSyncConfig();
   const rawInput = (
     overrideSyncKeyInput !== undefined ? overrideSyncKeyInput : config.sharedFolderInput
   )?.trim();
 
-  // 1. Check if the user pasted an Offline Sync Code (`LKSYNC1:...`)
+  // 1. Check if the user pasted a self-contained Offline Sync Code (`LKSYNC1:...`)
   if (rawInput && rawInput.includes('LKSYNC1:')) {
     const decoded = decodeOfflineSyncPackageKey(rawInput);
     if (!decoded) {
       throw new Error(
-        'The pasted Offline Sync Key (LKSYNC1:...) appears incomplete. Please tap "Copy Offline Key" on the Primary Phone and paste again.'
+        'The pasted Offline Sync Package (LKSYNC1:...) appears incomplete. Please tap "Copy Offline Sync Package" on the Primary Phone and paste again.'
       );
     }
     return applyMasterSyncPayloadLocally(decoded, 'LKSYNC1-OFFLINE');
   }
 
-  // 2. Check if the user pasted a `LK-XXXXXXXXXXXX` Master Sync Key (or 12-char Relay ID)
+  // 2. If the user pasted a legacy `LK-XXXXXXXXXXXX` Sync Key, explicitly inform them that Sync Key Only relay is disabled
   const relayFileId = extractRelayFileIdFromSyncKey(rawInput);
   if (relayFileId) {
-    let targetRelayId = relayFileId;
-    const directRes = await fetch(`https://ntfy.sh/file/${targetRelayId}.json`);
-    if (!directRes.ok) {
-      throw new Error(
-        `Sync Key LK-${targetRelayId} has expired or was not found (${directRes.status}). On your Primary Phone, open Google Drive Sync, tap "Refresh & Copy Sync Key", and paste the new LK-... key here.`
-      );
-    }
-
-    let payload = (await directRes.json()) as MasterSyncPayload;
-
-    // Check if the Primary Phone has published an even newer snapshot on its channel since this key was copied!
-    const channelTopic = payload?.syncChannelTopic || config.masterSyncChannelTopic;
-    if (channelTopic) {
-      try {
-        const pollRes = await fetch(`https://ntfy.sh/${channelTopic}/json?poll=1&since=all`);
-        if (pollRes.ok) {
-          const lines = (await pollRes.text())
-            .trim()
-            .split('\n')
-            .filter(Boolean)
-            .map((l) => JSON.parse(l) as { id?: string; time?: number; attachment?: { url?: string } });
-          const newestMsg = [...lines].reverse().find((m) => m.id && m.attachment?.url);
-          if (newestMsg?.id && newestMsg.id !== targetRelayId) {
-            const newerFileRes = await fetch(`https://ntfy.sh/file/${newestMsg.id}.json`);
-            if (newerFileRes.ok) {
-              const newerPayload = (await newerFileRes.json()) as MasterSyncPayload;
-              if (newerPayload?.data?.students) {
-                payload = newerPayload;
-                targetRelayId = newestMsg.id;
-              }
-            }
-          }
-        }
-      } catch {
-        // Use the already downloaded payload
-      }
-    }
-
-    return applyMasterSyncPayloadLocally(payload, `LK-${targetRelayId}`);
-  }
-
-  // 3. Check if the Secondary Phone has a saved `masterSyncChannelTopic` from a previous Sync Key pull
-  if (!rawInput && config.masterSyncChannelTopic) {
-    try {
-      const pollRes = await fetch(
-        `https://ntfy.sh/${config.masterSyncChannelTopic}/json?poll=1&since=all`
-      );
-      if (pollRes.ok) {
-        const lines = (await pollRes.text())
-          .trim()
-          .split('\n')
-          .filter(Boolean)
-          .map((l) => JSON.parse(l) as { id?: string; attachment?: { url?: string } });
-        const newestMsg = [...lines].reverse().find((m) => m.id && m.attachment?.url);
-        if (newestMsg?.id) {
-          const newerFileRes = await fetch(`https://ntfy.sh/file/${newestMsg.id}.json`);
-          if (newerFileRes.ok) {
-            const newerPayload = (await newerFileRes.json()) as MasterSyncPayload;
-            if (newerPayload?.data?.students) {
-              return applyMasterSyncPayloadLocally(newerPayload, `LK-${newestMsg.id}`);
-            }
-          }
-        }
-      }
-    } catch {
-      // Fall through to Google Drive lookup
-    }
-  }
-
-  // 4. Otherwise resolve via `findMasterSyncFileOnDrive` (includes bridged Drive IDs & authenticated Drive search)
-  const fileMeta = await findMasterSyncFileOnDrive(accessToken, rawInput);
-  if (!fileMeta) {
-    if (rawInput && /^[a-zA-Z0-9_-]{20,}$/.test(rawInput)) {
-      throw new Error(
-        'That looks like a raw Google Drive File ID, which Google blocks across different Gmail accounts. On your Primary Phone, open Google Drive Sync → Method 1, tap "Copy Sync Key" (starts with LK-...), and paste that LK-... key here!'
-      );
-    }
     throw new Error(
-      `No '${MASTER_DRIVE_BACKUP_FILENAME}' found. On your Primary Phone, open Google Drive Sync → Method 1, tap "Copy Sync Key" (starts with LK-...), and paste it here on the Secondary Phone.`
+      'Sync Key Only (LK-...) synchronization via public ntfy.sh relay has been disabled in Phase 0 Security Containment to protect student and payment data privacy. Please sign in with the Library Google Drive account or use "Copy Offline Sync Package (LKSYNC1:...)" instead.'
     );
-  }
-
-  // If `findMasterSyncFileOnDrive` resolved a bridged `LK-...` key:
-  if (fileMeta.id.startsWith('LK-')) {
-    const bridgedRelayId = fileMeta.id.replace(/^LK-/, '');
-    const bridgedRes = await fetch(`https://ntfy.sh/file/${bridgedRelayId}.json`);
-    if (bridgedRes.ok) {
-      const bridgedPayload = (await bridgedRes.json()) as MasterSyncPayload;
-      return applyMasterSyncPayloadLocally(bridgedPayload, fileMeta.id);
-    }
   }
 
   const hasRealOAuthToken = Boolean(accessToken && accessToken !== 'IDENTITY_SESSION_ACTIVE');
-  const apiKeyParam = firebaseConfig.apiKey ? `&key=${encodeURIComponent(firebaseConfig.apiKey)}` : '';
-
-  let res = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${fileMeta.id}?alt=media&supportsAllDrives=true${
-      hasRealOAuthToken ? '' : apiKeyParam
-    }`,
-    {
-      headers: hasRealOAuthToken
-        ? {
-            Authorization: `Bearer ${accessToken}`,
-          }
-        : {},
-    }
-  );
-
-  if (!res.ok && hasRealOAuthToken && apiKeyParam) {
-    res = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${fileMeta.id}?alt=media&supportsAllDrives=true${apiKeyParam}`
+  if (!hasRealOAuthToken) {
+    throw new Error(
+      'Google Drive authentication is required. Please sign in with the Library Google Account (or paste an Offline Sync Package starting with LKSYNC1:...).'
     );
   }
 
-  if (!res.ok) {
+  // 3. Resolve via authenticated Google Drive search
+  const fileMeta = await findMasterSyncFileOnDrive(accessToken, rawInput);
+  if (!fileMeta) {
     throw new Error(
-      'Google Drive blocked cross-account download. Please copy the "LK-..." Master Sync Key from Method 1 on your Primary Phone and paste it in Section 1 on this Secondary Phone.'
+      `No '${MASTER_DRIVE_BACKUP_FILENAME}' found in this Google Drive account. Ensure all library devices are signed into the same dedicated Library Google Account or use an Offline Sync Package (LKSYNC1:...).`
+    );
+  }
+
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileMeta.id}?alt=media&supportsAllDrives=true`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      clearStoredGoogleAuthSession();
+      throw new Error('AUTH_REQUIRED');
+    }
+    throw new Error(
+      `Failed to download '${MASTER_DRIVE_BACKUP_FILENAME}' from Google Drive (HTTP ${res.status}). Ensure you are signed into the authorized Library Google Account.`
     );
   }
 

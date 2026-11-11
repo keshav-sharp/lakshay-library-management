@@ -24,10 +24,21 @@ All tracked issues are also logged and closed in the **[GitHub Issues Tracker](h
 | **[#12](https://github.com/keshav-sharp/lakshay-library-management/issues/12)** | **Real-Time Active Auto-Sync & Telemetry** | Secondary devices required manual sync pull, and client sessions & Secondary device errors were not shared across devices in real time | Primary changes only synced when manual push was tapped or daily cron ran, and Secondary device error logs stayed isolated in local storage | Added real-time debounced auto-sync (`triggerLivePrimaryAutoSync`) on Primary data entry, active-state auto-polling on Secondary devices, and cross-device heartbeat sessions & error log relay (`${topic}_presence`, `${topic}_logs`) | `v2.0.5` |
 | **[#13](https://github.com/keshav-sharp/lakshay-library-management/issues/13)** | **Bidirectional Multi-Device Sync** | Real-time auto-sync was unidirectional (Primary -> Secondary), preventing edits made on Secondary or third consecutive devices from syncing back to Primary | Role guard restricted live broadcasting to `PRIMARY` role and polling to `SECONDARY` role, creating asymmetric one-way sync | Expanded live auto-sync (`triggerLiveAutoSync`) and live polling (`checkAndApplyLiveRelaySync`) across all connected devices with self-authored snapshot filtering (`primaryDeviceId !== config.deviceId`) | `v2.0.6` |
 | **[#14](https://github.com/keshav-sharp/lakshay-library-management/issues/14)** | **Mobile Viewport Optimization, Help & FAQ, UPI Sync, Security Policy** | Sidewise scrollbar on mobile viewports, cluttered inline explanatory text, standalone color palette drawer clutter, and missing cross-device sync for library UPI/standee details | Viewport width overflow in headers and modal containers, uncentralized documentation, decoupled UPI config in MasterSyncPayload, and unconfigured GitHub security policy | Enforced strict zero-horizontal-scroll viewport containment (`overflow-x: hidden`), built dedicated `HelpFaqModal`, moved palette to Settings, synchronized `upiConfig` cross-device via `triggerLiveAutoSync`, and established GitHub security policy (`SECURITY.md`) | `v2.0.7` |
+| **[#15](https://github.com/keshav-sharp/lakshay-library-management/issues/15)** | **Financial Ledger & Receipts** | Attendance clutter in desk workflow and lack of official downloadable fee receipts for student fee collection | Desk staff lacked official payment receipts for students, while QR attendance check-in added unnecessary UI complexity | Retired active Attendance UI while keeping historical logs intact, implemented offline A4 jsPDF receipt generator with immutable snapshots, and added customizable receipt branding | `v2.0.8` |
 
 ---
 
 ## 🔍 Detailed Post-Mortems & Technical Solutions
+
+### Issue #15: Attendance Feature Retirement & Offline PDF Fee Receipts (`v2.0.8`)
+- **Symptom**: Library desk administrators required physical and digital fee receipts for students paying desk fees, while attendance QR scanning was underutilized and cluttered desk operations.
+- **Root Cause**: The application lacked a client-side PDF document generation pipeline, and receipt numbering was non-deterministic.
+- **Fix Applied**:
+  1. Integrated `jspdf` for deterministic offline rendering of A4 payment receipts.
+  2. Implemented `amountToWordsINR` for Indian Rupee currency representation.
+  3. Added `FeeReceiptModal` supporting instant PDF download, direct iframe printing, and WhatsApp text summaries.
+  4. Decoupled payment persistence from receipt generation to guarantee zero data loss if PDF rendering encounters low device memory.
+  5. Retired active Attendance navigation and calendar grids while preserving all historical attendance data in storage and backups.
 
 ### Issue #1: Multi-Phone Google Drive Sync Overwrite Conflicts (`v1.2.0`)
 - **Symptom**: When a library owner used two phones (e.g., Front Desk Phone and Owner's Home Phone) connected to the same Google Drive account, the second phone could accidentally push an older local state and overwrite newly registered students.

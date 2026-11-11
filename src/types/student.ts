@@ -6,6 +6,14 @@ export interface PaymentRecord {
   paymentMode: 'Cash' | 'UPI' | 'Card' | 'Bank Transfer';
   receiptNumber: string;
   note?: string;
+  studentName?: string;
+  studentPhone?: string;
+  seatNumber?: string;
+  transactionId?: string;
+  feePeriod?: string;
+  discount?: number;
+  previousBalance?: number;
+  remainingBalance?: number;
 }
 
 export interface DailyAttendanceRecord {
@@ -31,6 +39,10 @@ export interface Student {
   notes?: string;
   lastCheckIn?: string;   // ISO timestamp of latest library check-in
   photoUrl?: string;      // Student camera photo data URL
+  status?: 'active' | 'archived';
+  archivedAt?: string;
+  archivedSeatNumber?: string;
+  updatedAt?: string;
 }
 
 export type TabScreen = 'ALL' | 'DUE_SOON' | 'OVERDUE' | 'ANALYTICS';

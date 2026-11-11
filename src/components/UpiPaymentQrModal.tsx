@@ -30,7 +30,7 @@ interface UpiPaymentQrModalProps {
   isOpen: boolean;
   onClose: () => void;
   onTriggerToast: (msg: string) => void;
-  onOpenHelpFaq?: (category?: 'SYNC' | 'UPI' | 'SEATS' | 'SHIFTS' | 'ATTENDANCE' | 'REMINDERS') => void;
+  onOpenHelpFaq?: (category?: 'SYNC' | 'UPI' | 'SEATS' | 'SHIFTS' | 'RECEIPTS' | 'REMINDERS') => void;
 }
 
 export const UpiPaymentQrModal: React.FC<UpiPaymentQrModalProps> = ({
