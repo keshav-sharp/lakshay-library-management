@@ -1750,19 +1750,19 @@ const writeAndVerifyFinancialStore = (key: string, value: unknown): void => {
 
 
 const archiveCommittedJournal = (entry: FinancialJournalEntry): void => {
-  const rawAudit = localStorage.getItem(FINANCIAL_AUDIT_TRAIL_KEY);
-  let audit: FinancialJournalEntry[] = [];
-  if (rawAudit !== null) {
-    const parsed = JSON.parse(rawAudit);
-    if (!Array.isArray(parsed)) throw new Error('Financial audit trail is malformed.');
-    audit = parsed;
-  }
-  const updated = [entry, ...audit.filter((a) => a.journalId !== entry.journalId)].slice(0, 100);
-  const serialized = JSON.stringify(updated);
-  localStorage.setItem(FINANCIAL_AUDIT_TRAIL_KEY, serialized);
-  if (localStorage.getItem(FINANCIAL_AUDIT_TRAIL_KEY) !== serialized) {
+  try {
+    const rawAudit = localStorage.getItem(FINANCIAL_AUDIT_TRAIL_KEY);
+    let audit: FinancialJournalEntry[] = [];
+    if (rawAudit !== null) {
+      const parsed = JSON.parse(rawAudit);
+      if (!Array.isArray(parsed)) throw new Error('Financial audit trail is malformed.');
+      audit = parsed;
+    }
+    const updated = [entry, ...audit.filter((a) => a.journalId !== entry.journalId)].slice(0, 100);
+    writeAndVerifyFinancialStore(FINANCIAL_AUDIT_TRAIL_KEY, updated);
+  } catch (error) {
     setRecoveryOnlyMode(true);
-    throw new Error('Financial audit trail persistence verification failed.');
+    throw error;
   }
 
 /**
@@ -1999,7 +1999,7 @@ export const markStudentPaidInFirestore = (
 
   // 5. STEP 2: Payment-First Local Persistence
   allPayments[studentId] = [newRecord, ...studentPayments];
-  localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(allPayments));
+  writeAndVerifyFinancialStore(PAYMENTS_STORAGE_KEY, allPayments);
 
   // Update Journal state to PAYMENT_PERSISTED
   journalEntry.state = 'PAYMENT_PERSISTED';
