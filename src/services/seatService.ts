@@ -1,4 +1,4 @@
-import { assertProductionWritesAllowed } from './storageService';
+import { assertProductionWritesAllowed, isRecoveryOnlyMode, setRecoveryOnlyMode } from './storageService';
 export interface SeatItem {
   id: string;
   seatNumber: string; // e.g. "A-01"
@@ -54,17 +54,20 @@ export const INITIAL_SEATS: SeatItem[] = generateInitialSeats();
 export const getStoredSeats = (): SeatItem[] => {
   try {
     const raw = localStorage.getItem(SEATS_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(SEATS_STORAGE_KEY, JSON.stringify(INITIAL_SEATS));
+    if (raw === null) {
+      if (!isRecoveryOnlyMode()) {
+        localStorage.setItem(SEATS_STORAGE_KEY, JSON.stringify(INITIAL_SEATS));
+      }
       return INITIAL_SEATS;
     }
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
-      localStorage.setItem(SEATS_STORAGE_KEY, JSON.stringify(INITIAL_SEATS));
-      return INITIAL_SEATS;
+      setRecoveryOnlyMode(true);
+      return INITIAL_SEATS; // Display fallback only; preserve the original bytes.
     }
-    return parsed;
+    return parsed as SeatItem[];
   } catch {
+    setRecoveryOnlyMode(true);
     return INITIAL_SEATS;
   }
 };
