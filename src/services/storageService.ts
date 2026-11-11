@@ -17,7 +17,15 @@ export { offsetDateString, getTodayDateString };
 const secureGetItem = (key: string): string | null => {
   const raw = localStorage.getItem(key);
   if (!raw) return null;
-  return decryptStoragePayload(raw);
+  if (raw.startsWith('AESGCM_GCM_V2:')) {
+    try {
+      return decryptStoragePayload(raw);
+    } catch (err) {
+      console.error(`[Security Error] Decryption failed for key "${key}":`, err);
+      throw err;
+    }
+  }
+  return raw;
 };
 
 const secureSetItem = (key: string, value: string): void => {
@@ -1132,9 +1140,9 @@ export const ensureSafeProductionInit = (): SafeInitReport => {
       };
     }
 
-    const rawStudents = localStorage.getItem(STUDENTS_STORAGE_KEY);
-    const rawPayments = localStorage.getItem(PAYMENTS_STORAGE_KEY);
-    const rawAttendance = localStorage.getItem(DAILY_ATTENDANCE_STORAGE_KEY);
+    const rawStudents = secureGetItem(STUDENTS_STORAGE_KEY);
+    const rawPayments = secureGetItem(PAYMENTS_STORAGE_KEY);
+    const rawAttendance = secureGetItem(DAILY_ATTENDANCE_STORAGE_KEY);
     const initMarker = localStorage.getItem(PRODUCTION_CLEAN_INIT_KEY);
 
     let parsedStudents: Student[] | null = null;
@@ -1211,13 +1219,13 @@ export const ensureSafeProductionInit = (): SafeInitReport => {
     if (studentsCorrupted || paymentsCorrupted || attendanceCorrupted) {
       setRecoveryOnlyMode(true);
       if (parsedStudents && !studentsCorrupted) {
-        localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(parsedStudents));
+        secureSetItem(STUDENTS_STORAGE_KEY, JSON.stringify(parsedStudents));
       }
       if (parsedPayments && !paymentsCorrupted) {
-        localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(parsedPayments));
+        secureSetItem(PAYMENTS_STORAGE_KEY, JSON.stringify(parsedPayments));
       }
       if (parsedAttendance && !attendanceCorrupted) {
-        localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(parsedAttendance));
+        secureSetItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(parsedAttendance));
       }
 
       return {
@@ -1256,13 +1264,13 @@ export const ensureSafeProductionInit = (): SafeInitReport => {
       }
 
       if (rawStudents === null || studentsCorrupted) {
-        localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(parsedStudents || []));
+        secureSetItem(STUDENTS_STORAGE_KEY, JSON.stringify(parsedStudents || []));
       }
       if (rawPayments === null || paymentsCorrupted) {
-        localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(parsedPayments || {}));
+        secureSetItem(PAYMENTS_STORAGE_KEY, JSON.stringify(parsedPayments || {}));
       }
       if (rawAttendance === null || attendanceCorrupted) {
-        localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(parsedAttendance || []));
+        secureSetItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(parsedAttendance || []));
       }
 
       localStorage.setItem(PRODUCTION_CLEAN_INIT_KEY, '1');
@@ -1283,30 +1291,30 @@ export const ensureSafeProductionInit = (): SafeInitReport => {
     if (studentsCorrupted || paymentsCorrupted || attendanceCorrupted) {
       // Restore valid subsets if present, quarantine invalid keys
       if (parsedStudents && !studentsCorrupted) {
-        localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(parsedStudents));
+        secureSetItem(STUDENTS_STORAGE_KEY, JSON.stringify(parsedStudents));
       } else if (rawStudents !== null) {
         const qKey = `libtrack_quarantine_students_raw_${Date.now()}`;
         localStorage.setItem(qKey, rawStudents);
         quarantinedKeys.push(qKey);
-        localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify([]));
+        secureSetItem(STUDENTS_STORAGE_KEY, JSON.stringify([]));
       }
 
       if (parsedPayments && !paymentsCorrupted) {
-        localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(parsedPayments));
+        secureSetItem(PAYMENTS_STORAGE_KEY, JSON.stringify(parsedPayments));
       } else if (rawPayments !== null) {
         const qKey = `libtrack_quarantine_payments_raw_${Date.now()}`;
         localStorage.setItem(qKey, rawPayments);
         quarantinedKeys.push(qKey);
-        localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify({}));
+        secureSetItem(PAYMENTS_STORAGE_KEY, JSON.stringify({}));
       }
 
       if (parsedAttendance && !attendanceCorrupted) {
-        localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(parsedAttendance));
+        secureSetItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(parsedAttendance));
       } else if (rawAttendance !== null) {
         const qKey = `libtrack_quarantine_attendance_raw_${Date.now()}`;
         localStorage.setItem(qKey, rawAttendance);
         quarantinedKeys.push(qKey);
-        localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify([]));
+        secureSetItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify([]));
       }
 
       localStorage.setItem(PRODUCTION_CLEAN_INIT_KEY, '1');
@@ -1323,9 +1331,9 @@ export const ensureSafeProductionInit = (): SafeInitReport => {
 
 
     // State 4: Genuinely empty fresh installation
-    localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify([]));
-    localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify({}));
-    localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify([]));
+    secureSetItem(STUDENTS_STORAGE_KEY, JSON.stringify([]));
+    secureSetItem(PAYMENTS_STORAGE_KEY, JSON.stringify({}));
+    secureSetItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify([]));
     localStorage.setItem(PRODUCTION_CLEAN_INIT_KEY, '1');
     return {
       state: 'FRESH_EMPTY_INITIALIZED',
@@ -1398,20 +1406,20 @@ export const subscribeToFirestore = (callback: Listener): (() => void) => {
 export const getAllStoredStudentsRaw = (): Student[] => {
   ensureProductionCleanInit();
   try {
-    const raw = localStorage.getItem(STUDENTS_STORAGE_KEY);
+    const raw = secureGetItem(STUDENTS_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(INITIAL_STUDENTS));
+      secureSetItem(STUDENTS_STORAGE_KEY, JSON.stringify(INITIAL_STUDENTS));
       return INITIAL_STUDENTS;
     }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
-      localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(INITIAL_STUDENTS));
+      secureSetItem(STUDENTS_STORAGE_KEY, JSON.stringify(INITIAL_STUDENTS));
       return INITIAL_STUDENTS;
     }
     // Strip only legacy synthetic example IDs (std_001 .. std_008)
     const cleaned = parsed.filter((s: Student) => s && !LEGACY_EXAMPLE_STUDENT_IDS.has(s.id));
     if (cleaned.length !== parsed.length) {
-      localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(cleaned));
+      secureSetItem(STUDENTS_STORAGE_KEY, JSON.stringify(cleaned));
     }
     return cleaned;
   } catch {
@@ -1442,14 +1450,14 @@ export const getStoredArchivedStudents = (): Student[] => {
  */
 export const getStoredPayments = (): Record<string, PaymentRecord[]> => {
   try {
-    const raw = localStorage.getItem(PAYMENTS_STORAGE_KEY);
+    const raw = secureGetItem(PAYMENTS_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(INITIAL_PAYMENT_HISTORY));
+      secureSetItem(PAYMENTS_STORAGE_KEY, JSON.stringify(INITIAL_PAYMENT_HISTORY));
       return INITIAL_PAYMENT_HISTORY;
     }
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(INITIAL_PAYMENT_HISTORY));
+      secureSetItem(PAYMENTS_STORAGE_KEY, JSON.stringify(INITIAL_PAYMENT_HISTORY));
       return INITIAL_PAYMENT_HISTORY;
     }
     let modified = false;
@@ -1463,7 +1471,7 @@ export const getStoredPayments = (): Record<string, PaymentRecord[]> => {
       }
     }
     if (modified) {
-      localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(cleaned));
+      secureSetItem(PAYMENTS_STORAGE_KEY, JSON.stringify(cleaned));
     }
     return cleaned;
   } catch {
@@ -1481,21 +1489,21 @@ export const getStudentPaymentHistory = (studentId: string): PaymentRecord[] => 
 // DailyAttendance Firestore Collection Methods
 export const getStoredDailyAttendance = (): DailyAttendanceRecord[] => {
   try {
-    const raw = localStorage.getItem(DAILY_ATTENDANCE_STORAGE_KEY);
+    const raw = secureGetItem(DAILY_ATTENDANCE_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(INITIAL_DAILY_ATTENDANCE));
+      secureSetItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(INITIAL_DAILY_ATTENDANCE));
       return INITIAL_DAILY_ATTENDANCE;
     }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
-      localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(INITIAL_DAILY_ATTENDANCE));
+      secureSetItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(INITIAL_DAILY_ATTENDANCE));
       return INITIAL_DAILY_ATTENDANCE;
     }
     const cleaned = parsed.filter(
       (rec: DailyAttendanceRecord) => rec && !LEGACY_EXAMPLE_STUDENT_IDS.has(rec.studentId)
     );
     if (cleaned.length !== parsed.length) {
-      localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(cleaned));
+      secureSetItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(cleaned));
     }
     return cleaned;
   } catch {
@@ -1726,7 +1734,7 @@ export interface FinancialJournalEntry {
 }
 
 export const getFinancialJournal = (): FinancialJournalEntry[] => {
-  const raw = localStorage.getItem(FINANCIAL_JOURNAL_KEY);
+  const raw = secureGetItem(FINANCIAL_JOURNAL_KEY);
   if (raw === null || raw === '') return [];
   let parsed: unknown;
   try {
@@ -1751,8 +1759,8 @@ export const getFinancialJournal = (): FinancialJournalEntry[] => {
 export const saveFinancialJournal = (entries: FinancialJournalEntry[]): boolean => {
   try {
     const serialized = JSON.stringify(entries);
-    localStorage.setItem(FINANCIAL_JOURNAL_KEY, serialized);
-    if (localStorage.getItem(FINANCIAL_JOURNAL_KEY) !== serialized) {
+    secureSetItem(FINANCIAL_JOURNAL_KEY, serialized);
+    if (secureGetItem(FINANCIAL_JOURNAL_KEY) !== serialized) {
       throw new Error('Financial journal storage verification check failed.');
     }
     return true;
@@ -1766,8 +1774,8 @@ export const saveFinancialJournal = (entries: FinancialJournalEntry[]): boolean 
 const writeAndVerifyFinancialStore = (key: string, value: unknown): void => {
   const serialized = JSON.stringify(value);
   try {
-    localStorage.setItem(key, serialized);
-    if (localStorage.getItem(key) !== serialized) {
+    secureSetItem(key, serialized);
+    if (secureGetItem(key) !== serialized) {
       throw new Error(`Persistence verification failed for ${key}.`);
     }
   } catch (error) {
@@ -1779,7 +1787,7 @@ const writeAndVerifyFinancialStore = (key: string, value: unknown): void => {
 
 const archiveCommittedJournal = (entry: FinancialJournalEntry): void => {
   try {
-    const rawAudit = localStorage.getItem(FINANCIAL_AUDIT_TRAIL_KEY);
+    const rawAudit = secureGetItem(FINANCIAL_AUDIT_TRAIL_KEY);
     let audit: FinancialJournalEntry[] = [];
     if (rawAudit !== null) {
       const parsed = JSON.parse(rawAudit);
@@ -1808,12 +1816,12 @@ export const recoverPendingFinancialTransactions = (): {
     const journal = getFinancialJournal();
     if (journal.length === 0) return report;
 
-    const rawStudents = localStorage.getItem(STUDENTS_STORAGE_KEY);
+    const rawStudents = secureGetItem(STUDENTS_STORAGE_KEY);
     if (rawStudents === null) throw new Error('Student registry is missing while financial journal has pending entries.');
     const parsedStudents: unknown = JSON.parse(rawStudents);
     if (!Array.isArray(parsedStudents)) throw new Error('Student registry is invalid during financial recovery.');
     const allStudents = parsedStudents as Student[];
-    const rawPayments = localStorage.getItem(PAYMENTS_STORAGE_KEY);
+    const rawPayments = secureGetItem(PAYMENTS_STORAGE_KEY);
     if (rawPayments === null) throw new Error('Payment ledger is missing while financial journal has pending entries.');
     const parsedPayments: unknown = JSON.parse(rawPayments);
     if (!parsedPayments || typeof parsedPayments !== 'object' || Array.isArray(parsedPayments)) {
@@ -1892,8 +1900,8 @@ export const recoverPendingFinancialTransactions = (): {
 
     if (studentsModified) {
       const serializedStudents = JSON.stringify(allStudents);
-      localStorage.setItem(STUDENTS_STORAGE_KEY, serializedStudents);
-      if (localStorage.getItem(STUDENTS_STORAGE_KEY) !== serializedStudents) {
+      secureSetItem(STUDENTS_STORAGE_KEY, serializedStudents);
+      if (secureGetItem(STUDENTS_STORAGE_KEY) !== serializedStudents) {
         throw new Error('Student due-date persistence verification failed during recovery.');
       }
     }
