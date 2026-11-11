@@ -39,6 +39,10 @@ A production-grade, offline-first library and study hall management system built
     - Complete private vulnerability disclosure policy supporting `2.0.x` with 48h SLA and sandboxed architecture.
 11. **Homepage Financial Analytics & Navigation Drawer Optimization (`v2.0.7`)**:
     - Embedded homepage financial analytics summary banner for instant 30-day collection forecasts and run-rates, with Help & Documentation placed conveniently at the bottom of the Navigation Drawer.
+12. **Client-Side Offline PDF Fee Receipts & Attendance Retirement (`v2.0.8`)**:
+    - Built-in 100% offline A4 PDF fee receipt generator using `jsPDF` with immutable point-in-time snapshots, amount in words (`amountToWordsINR`), direct iframe printing, and WhatsApp text summaries.
+    - Added customizable library address, phone, email, and receipt terms under Settings.
+    - Retired active Attendance interface and QR scanner while preserving 100% of historical attendance records in storage for backup and `LKSYNC1` compatibility.
 
 ---
 
@@ -171,7 +175,7 @@ This app is a certified Progressive Web App (PWA):
 Curious about the technical challenges we solved while building this app across Web (PWA) and Android (`.apk`)? We maintain a full post-mortem log and closed issue tracker covering every bug, root cause, and architectural fix:
 
 - 📖 **[Read the Full `ENGINEERING_LOG.md`](ENGINEERING_LOG.md)**
-- 🐛 **[Browse Resolved GitHub Issues (`#1` – `#14`)](https://github.com/keshav-sharp/lakshay-library-management/issues?q=is%3Aissue+is%3Aclosed)**
+- 🐛 **[Browse Resolved GitHub Issues (`#1` – `#15`)](https://github.com/keshav-sharp/lakshay-library-management/issues?q=is%3Aissue+is%3Aclosed)**
 
 | Issue | Category | Summary of Challenge & Fix | Fixed In |
 | :--- | :--- | :--- | :--- |
@@ -189,6 +193,7 @@ Curious about the technical challenges we solved while building this app across 
 | **[#12](https://github.com/keshav-sharp/lakshay-library-management/issues/12)** | Real-Time Active Sync | Enabled immediate auto-sync on active state, cross-device client sessions capture, and secondary device logs relay | `v2.0.5` |
 | **[#13](https://github.com/keshav-sharp/lakshay-library-management/issues/13)** | Vice-Versa Sync | Enabled bidirectional multi-device consecutive sync: Primary ⇄ Secondary ⇄ Third device real-time updates | `v2.0.6` |
 | **[#14](https://github.com/keshav-sharp/lakshay-library-management/issues/14)** | Mobile UI & Security | Enforced zero-horizontal-scroll viewport containment, built dedicated Help & FAQ Center, moved palette under Settings, cross-synced UPI config, and set up GitHub security policy | `v2.0.7` |
+| **[#15](https://github.com/keshav-sharp/lakshay-library-management/issues/15)** | Financial Ledger & Receipts | Built 100% offline client-side PDF Fee Receipts (jsPDF) with immutable snapshots, customizable library settings, and retired active attendance UI while preserving historical records | `v2.0.8` |
 
 ---
 
@@ -196,9 +201,9 @@ Curious about the technical challenges we solved while building this app across 
 
 | Channel | Direct Link | Description |
 | :--- | :--- | :--- |
-| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v2.0.7)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
-| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v2.0.7`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
-| **Engineering Issues & Fixes Log** | 🛠️ **[View `ENGINEERING_LOG.md`](ENGINEERING_LOG.md)** | Root-cause analysis and fixes for all 14 engineering & security challenges solved during development. |
+| **Direct 1-Click `.APK` Download (Latest)** | 👉 **[Download `LakshayLibrary.apk` (v2.0.8)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)** | Direct binary download — tap on your Android phone to install immediately (no unzipping required). |
+| **All APK Versions & Releases** | 🏷️ **[GitHub Releases Page (`v1.0.0` – `v2.0.8`)](https://github.com/keshav-sharp/lakshay-library-management/releases)** | Browse all historical app versions, release notes, and past APK builds. |
+| **Engineering Issues & Fixes Log** | 🛠️ **[View `ENGINEERING_LOG.md`](ENGINEERING_LOG.md)** | Root-cause analysis and fixes for all 15 engineering & security challenges solved during development. |
 | **Full Changelog** | 📜 **[View `CHANGELOG.md`](CHANGELOG.md)** | Detailed version-by-version history of features, fixes, and improvements. |
 
 ---
