@@ -61,6 +61,8 @@ const {
   setRecoveryOnlyMode,
   FINANCIAL_JOURNAL_KEY,
 } = require('../src/services/storageService');
+const { addCustomShift } = require('../src/services/shiftService');
+const { addCustomSeat } = require('../src/services/seatService');
 
 let testsPassed = 0;
 let testsFailed = 0;
@@ -277,6 +279,14 @@ runTest('Recovery fails closed when storage reads are unavailable', () => {
   localStorage.failOnGetKey = FINANCIAL_JOURNAL_KEY;
   assert.strictEqual(isRecoveryOnlyMode(), true);
   localStorage.failOnGetKey = null;
+});
+
+runTest('Seat, shift, and student attendance mutations are blocked in recovery-only mode', () => {
+  localStorage.clear();
+  setRecoveryOnlyMode(true);
+  assert.throws(() => addCustomShift({ name: 'Test Shift', startTime: '08:00', endTime: '12:00' }), /recovery-only mode/);
+  assert.throws(() => addCustomSeat('Z-01'), /recovery-only mode/);
+  setRecoveryOnlyMode(false);
 });
 
 runTest('Repeated recovery execution is safe and idempotent', () => {
