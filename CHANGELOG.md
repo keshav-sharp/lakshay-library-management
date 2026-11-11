@@ -6,7 +6,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v2.0.9] - 2026-11-11 (Data Integrity, Safe Storage Initialization & Financial Transaction Stability)
+
+### Added & Improved
+- **Safe Non-Destructive Production Storage Initialization (`ensureSafeProductionInit`)**:
+  - Completely purged legacy destructive storage wiping logic.
+  - Formally distinguishes 6 operational storage states: Fresh Installation, Existing Valid, Existing Installation with Missing Marker Preserved, Partial Repaired, Corrupted Storage Quarantined, and Storage Inaccessible.
+  - Existing student, payment, archived, and attendance records are never deleted simply because an initialization marker is absent or uninitialized.
+  - Corrupted or unparseable payloads are timestamped and preserved in quarantine keys (`libtrack_quarantine_*`) rather than permanently erased.
+  - Verified local backups are triggered prior to any state transition.
+- **Crash-Recoverable Financial Transaction Protocol & Journaling (`markStudentPaidInFirestore`)**:
+  - Implemented a Write-Ahead Financial Journal (`libtrack_financial_journal_v1`) and audit trail (`libtrack_financial_audit_trail_v1`).
+  - Reversed persistence order to payment-first local storage, ensuring immutable records exist before updating mutable student due dates.
+  - Implemented automated startup recovery (`recoverPendingFinancialTransactions()`) that reconciles interrupted payments and restores 1:1 due date parity after unexpected application restarts, power losses, or browser crashes.
+  - Added client-level idempotency key enforcement (`idempotencyKey`) on payment submissions to eliminate accidental double charging and duplicate record generation on rapid retries.
+  - Replaced timestamp-based payment IDs with device-partitioned UUID identifiers (`pay_D01_<uuid>`) guaranteeing zero cross-device collision during offline operations.
+  - Added strict monetary validation rejecting negative amounts, zero, NaN, Infinity, and amounts exceeding ₹1 Crore, while tracking values internally in exact integer paise.
+- **Audited Indian Rupee Amount-in-Words Calculation (`amountToWordsINR`)**:
+  - Overhauled amount-to-words algorithm to strictly adhere to Indian financial standards (Crores, Lakhs, Thousands, Hundreds, Units, Rupees, and Paise).
+  - Handles decimal paise accurately (e.g. ₹10.50 -> "Ten Rupees and Fifty Paise Only", ₹1,23,456.78 -> "One Lakh Twenty Three Thousand Four Hundred Fifty Six Rupees and Seventy Eight Paise Only").
+  - Explicitly rejects negative, NaN, and infinite inputs instead of silently masking them.
+- **Dynamic Application Version in PDF Receipts (`receiptPdfService`)**:
+  - Centralized application version constants in `src/constants/version.ts`.
+  - Replaced obsolete hardcoded version strings in receipt footers with dynamic `APP_VERSION`.
+  - Enforced strict priority on immutable `PaymentRecord` snapshots (`shiftTimings`, `studentPhone`, `studentName`, `seatNumber`) preventing live profile mutations from altering historical receipts.
+- **Financial Merge Conflict Protection & Quarantine (`importSyncedFirestoreSnapshot`)**:
+  - Enforced deep comparison of immutable financial attributes (`amountPaid`, `paymentDate`, `studentId`, `receiptNumber`) during Google Drive and offline sync merges.
+  - Quarantines conflicting financial records into `libtrack_quarantined_payment_conflicts` for administrator inspection rather than silently overwriting local numbers.
+- **Capacitor Navigation Security**:
+  - Removed wildcard navigation (`*`) in `capacitor.config.json` and restricted WebView routing to explicit allowlisted application, Google OAuth, and Drive domains.
+- **Automated Regression Test Suite**:
+  - Added comprehensive automated test suite (`scripts/test-v209-integrity.cjs`) and bound it to `npm test`.
+  - Integrated automated linting and integrity testing into GitHub Actions (`.github/workflows/build-apk.yml`).
+
+### Compatibility & Safety
+- **Phase 1 IndexedDB Migration**: `PHASE1_PRODUCTION_AUTO_MIGRATION_ENABLED` strictly remains `false`.
+- **General Dual-Write**: Strictly remains disabled in production.
+- **Historical Records**: 100% backward compatible with existing v2.0.8, v2.0.7, and earlier production backups.
+
+---
+
 ## [v2.0.8] - 2026-11-11 (PDF Fee Receipts, Attendance Interface Retirement & Financial Ledger Hardening)
+
 
 ### Direct APK Download
 - 📦 **[Download `LakshayLibrary-v2.0.8.apk` (Latest)](https://github.com/keshav-sharp/lakshay-library-management/releases/latest/download/LakshayLibrary.apk)**

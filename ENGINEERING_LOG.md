@@ -25,12 +25,45 @@ All tracked issues are also logged and closed in the **[GitHub Issues Tracker](h
 | **[#13](https://github.com/keshav-sharp/lakshay-library-management/issues/13)** | **Bidirectional Multi-Device Sync** | Real-time auto-sync was unidirectional (Primary -> Secondary), preventing edits made on Secondary or third consecutive devices from syncing back to Primary | Role guard restricted live broadcasting to `PRIMARY` role and polling to `SECONDARY` role, creating asymmetric one-way sync | Expanded live auto-sync (`triggerLiveAutoSync`) and live polling (`checkAndApplyLiveRelaySync`) across all connected devices with self-authored snapshot filtering (`primaryDeviceId !== config.deviceId`) | `v2.0.6` |
 | **[#14](https://github.com/keshav-sharp/lakshay-library-management/issues/14)** | **Mobile Viewport Optimization, Help & FAQ, UPI Sync, Security Policy** | Sidewise scrollbar on mobile viewports, cluttered inline explanatory text, standalone color palette drawer clutter, and missing cross-device sync for library UPI/standee details | Viewport width overflow in headers and modal containers, uncentralized documentation, decoupled UPI config in MasterSyncPayload, and unconfigured GitHub security policy | Enforced strict zero-horizontal-scroll viewport containment (`overflow-x: hidden`), built dedicated `HelpFaqModal`, moved palette to Settings, synchronized `upiConfig` cross-device via `triggerLiveAutoSync`, and established GitHub security policy (`SECURITY.md`) | `v2.0.7` |
 | **[#15](https://github.com/keshav-sharp/lakshay-library-management/issues/15)** | **Financial Ledger & Receipts** | Attendance clutter in desk workflow and lack of official downloadable fee receipts for student fee collection | Desk staff lacked official payment receipts for students, while QR attendance check-in added unnecessary UI complexity | Retired active Attendance UI while keeping historical logs intact, implemented offline A4 jsPDF receipt generator with immutable snapshots, and added customizable receipt branding | `v2.0.8` |
+| **[#16](https://github.com/keshav-sharp/lakshay-library-management/issues/16)** | **Data Safety & Financial Integrity** | Startup storage wiping on missing marker, payment due-date advancement without payment record on crash, cross-device payment ID collision | Destructive `ensureProductionCleanInit` wiped storage on absent marker; non-atomic multi-key writes lacked intent journaling; timestamp payment IDs lacked device partitioning | Replaced with non-destructive `ensureSafeProductionInit` with 6 states & quarantine; implemented Write-Ahead Financial Journal with 2-phase commit & crash recovery; enforced idempotency keys & device-partitioned UUIDs (`pay_D01_<uuid>`); audited `amountToWordsINR`; hardened Capacitor navigation allowlist | `v2.0.9` |
 
 ---
 
 ## 🔍 Detailed Post-Mortems & Technical Solutions
 
+### Issue #16: Safe Storage Initialization, Write-Ahead Financial Journal & Financial Integrity (`v2.0.9`)
+- **Symptom**:
+  1. An existing installation with valid records could lose data if `lakshay_library_prod_v2_0_0_clean` was absent or cleared.
+  2. If the browser closed or the phone died between writing updated student due dates and appending to payment history, the student's due date advanced without a corresponding payment record.
+  3. Offline devices generating payments at the same millisecond had a theoretical payment ID collision risk with timestamp-only IDs (`pay_${Date.now()}`).
+  4. Decimal paise were omitted in PDF receipts, and negative numbers were silently inverted by `Math.abs()`.
+- **Root Cause**:
+  1. `ensureProductionCleanInit()` unconditionally set storage keys to `[]` whenever `localStorage.getItem(PRODUCTION_CLEAN_INIT_KEY) !== '1'`.
+  2. Multi-key `localStorage` writes lacked transactional intent logging and startup reconciliation.
+  3. Payment IDs lacked cryptographic entropy and device partitioning.
+  4. `amountToWordsINR` lacked integer paise support and recursive Indian chunking for hundreds and crores.
+- **Fix Applied**:
+  1. **Non-Destructive Initialization (`ensureSafeProductionInit`)**:
+     - Formally distinguishes 6 operational storage states: `EXISTING_VALID`, `EXISTING_MISSING_MARKER_PRESERVED`, `FRESH_EMPTY_INITIALIZED`, `PARTIAL_INITIALIZATION_REPAIRED`, `CORRUPTED_STORAGE_QUARANTINED_PRESERVED`, and `STORAGE_INACCESSIBLE`.
+     - Never deletes existing student, payment, archived, or attendance records. If records exist without an initialization marker, all data is backed up and preserved while the marker is stamped.
+     - Unparseable corrupted keys are quarantined to timestamped preservation keys rather than wiped.
+  2. **Write-Ahead Financial Journal (`libtrack_financial_journal_v1`)**:
+     - Implemented 2-phase commit protocol: (Step 1) Write journal entry with state `PREPARED`, (Step 2) Persist payment record to storage first and mark `PAYMENT_PERSISTED`, (Step 3) Advance student fee due date, (Step 4) Mark `COMMITTED` and prune to audit trail.
+     - Implemented `recoverPendingFinancialTransactions()` on application startup to detect and reconcile any interrupted payments, ensuring 100% parity between due dates and payment history.
+  3. **Idempotency & Collision-Resistant IDs**:
+     - Added `idempotencyKey` tracking on payment attempts to reject accidental double-submissions.
+     - Partitioned payment IDs as `pay_${deviceTag}_${uuid}` using stable device tagging and RFC4122 v4 UUIDs.
+     - Partitioned receipt numbers as `REC-YYYYMMDD-${deviceTag}-${timeEntropy}${randomChars}`.
+  4. **Strict Monetary Validation & Accurate INR Calculation**:
+     - Validates amounts as positive finite numbers $\le$ ₹1 Crore, tracking values internally as integer paise.
+     - Overhauled `amountToWordsINR()` following standard Indian banking (Crores, Lakhs, Thousands, Hundreds, Rupees, and Paise), correctly formatting decimal paise (e.g. ₹10.50, ₹1,23,456.78) and rejecting negative numbers or NaN.
+  5. **Snapshot Merge Conflict Protection**:
+     - Hardened `importSyncedFirestoreSnapshot` to deep-compare immutable financial attributes and quarantine conflicting payments to `libtrack_quarantined_payment_conflicts`.
+  6. **Capacitor Navigation Security**:
+     - Replaced wildcard navigation (`*`) with an explicit domain allowlist.
+
 ### Issue #15: Attendance Feature Retirement & Offline PDF Fee Receipts (`v2.0.8`)
+
 - **Symptom**: Library desk administrators required physical and digital fee receipts for students paying desk fees, while attendance QR scanning was underutilized and cluttered desk operations.
 - **Root Cause**: The application lacked a client-side PDF document generation pipeline, and receipt numbering was non-deterministic.
 - **Fix Applied**:

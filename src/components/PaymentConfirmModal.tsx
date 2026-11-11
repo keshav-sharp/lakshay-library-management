@@ -35,6 +35,12 @@ export const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
   const [transactionId, setTransactionId] = useState<string>('');
   const [note, setNote] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Stable idempotency key per modal open session to guarantee zero duplicate submissions
+  const [idempotencyKey, setIdempotencyKey] = useState<string>(() =>
+    student ? `idemp_${student.id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}` : ''
+  );
 
   if (!isOpen || !student) return null;
 
@@ -42,17 +48,30 @@ export const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
   const nextDate = advanceDateByOneMonth(student.nextFeeDueDate);
 
   const handleConfirm = () => {
+    setErrorMessage(null);
+
+    // Validate fee amount
+    if (typeof currentFee !== 'number' || Number.isNaN(currentFee) || !Number.isFinite(currentFee) || currentFee <= 0) {
+      setErrorMessage('Please enter a valid positive payment amount.');
+      return;
+    }
+    if (currentFee > 10_000_000) {
+      setErrorMessage('Payment amount exceeds maximum limit (₹1 Crore).');
+      return;
+    }
+
     setIsProcessing(true);
 
     setTimeout(() => {
       try {
         const { updatedStudent, newRecord } = markStudentPaidInFirestore(
           student.id,
-          currentFee || student.monthlyFee,
+          currentFee,
           paymentMode,
           note || `Monthly renewal (${paymentMode})`,
           {
             transactionId: transactionId.trim() || undefined,
+            idempotencyKey,
           }
         );
 
@@ -73,11 +92,13 @@ export const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
           onPaymentSuccess(newRecord, updatedStudent);
         }
       } catch (err) {
-        console.error(err);
+        console.error('Payment confirmation error', err);
+        setErrorMessage(err instanceof Error ? err.message : 'Failed to record payment');
         setIsProcessing(false);
       }
     }, 450);
   };
+
 
   return (
     <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150 ${darkModeClass}`}>
@@ -112,7 +133,15 @@ export const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
 
         {/* Content */}
         <div className="px-6 py-2 space-y-4">
+          {errorMessage && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2">
+              <span className="font-bold">Error:</span>
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-3">
+
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-500">Student Name</span>
               <span className="text-sm font-bold text-slate-900">{student.name}</span>

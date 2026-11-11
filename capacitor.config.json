@@ -7,8 +7,14 @@
     "hostname": "ais-pre-f5kgqrdu5jro7h3v6vij3e-370499925266.asia-east1.run.app",
     "androidScheme": "https",
     "allowNavigation": [
-      "*"
+      "ais-pre-f5kgqrdu5jro7h3v6vij3e-370499925266.asia-east1.run.app",
+      "ais-dev-f5kgqrdu5jro7h3v6vij3e-370499925266.asia-east1.run.app",
+      "accounts.google.com",
+      "*.google.com",
+      "*.googleapis.com",
+      "*.googleusercontent.com"
     ]
+
   },
   "android": {
     "allowMixedContent": false,

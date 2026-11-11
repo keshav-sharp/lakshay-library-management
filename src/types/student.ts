@@ -3,18 +3,22 @@ export interface PaymentRecord {
   studentId: string;
   paymentDate: string; // ISO string
   amountPaid: number;
+  amountPaise?: number; // Integer paise for financial calculation & validation
   paymentMode: 'Cash' | 'UPI' | 'Card' | 'Bank Transfer';
   receiptNumber: string;
   note?: string;
   studentName?: string;
   studentPhone?: string;
   seatNumber?: string;
+  shiftTimings?: string; // Immutable snapshot of student shift at payment time
+  idempotencyKey?: string; // Client submission idempotency key to prevent double charging
   transactionId?: string;
   feePeriod?: string;
   discount?: number;
   previousBalance?: number;
   remainingBalance?: number;
 }
+
 
 export interface DailyAttendanceRecord {
   id: string;

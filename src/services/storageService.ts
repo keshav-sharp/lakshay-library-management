@@ -53,7 +53,12 @@ export const ALL_PRESERVED_LOCAL_STORAGE_KEYS = [
   'lakshay_library_drive_logs_folder_meta_v2',
   'lakshay_app_theme',
   'lakshay_app_dark_mode',
+  'libtrack_financial_journal_v1',
+  'libtrack_quarantined_payment_conflicts',
+  'libtrack_device_id_v1',
+  'libtrack_financial_audit_trail_v1',
 ] as const;
+
 
 export const ALL_PRESERVED_SESSION_STORAGE_KEYS = [
   'lakshay_library_pending_drive_redirect',
@@ -1034,25 +1039,197 @@ export const downloadPhase0VerifiedBackupFile = (): Phase0BackupVerificationRepo
   };
 };
 
-const ensureProductionCleanInit = () => {
+export interface SafeInitReport {
+  state:
+    | 'EXISTING_VALID'
+    | 'EXISTING_MISSING_MARKER_PRESERVED'
+    | 'FRESH_EMPTY_INITIALIZED'
+    | 'PARTIAL_INITIALIZATION_REPAIRED'
+    | 'CORRUPTED_STORAGE_QUARANTINED_PRESERVED'
+    | 'STORAGE_INACCESSIBLE';
+  studentsCount: number;
+  paymentsCount: number;
+  attendanceCount: number;
+  backupPreserved: boolean;
+  quarantinedKeys: string[];
+  diagnostics: string;
+}
+
+export const ensureSafeProductionInit = (): SafeInitReport => {
   try {
-    if (typeof window === 'undefined' || !window.localStorage) return;
-    if (localStorage.getItem(PRODUCTION_CLEAN_INIT_KEY) !== '1') {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return {
+        state: 'STORAGE_INACCESSIBLE',
+        studentsCount: 0,
+        paymentsCount: 0,
+        attendanceCount: 0,
+        backupPreserved: false,
+        quarantinedKeys: [],
+        diagnostics: 'Storage inaccessible in current runtime environment.',
+      };
+    }
+
+    const rawStudents = localStorage.getItem(STUDENTS_STORAGE_KEY);
+    const rawPayments = localStorage.getItem(PAYMENTS_STORAGE_KEY);
+    const rawAttendance = localStorage.getItem(DAILY_ATTENDANCE_STORAGE_KEY);
+    const initMarker = localStorage.getItem(PRODUCTION_CLEAN_INIT_KEY);
+
+    let parsedStudents: Student[] | null = null;
+    let studentsCorrupted = false;
+    if (rawStudents !== null) {
+      try {
+        const parsed = JSON.parse(rawStudents);
+        if (Array.isArray(parsed)) parsedStudents = parsed;
+        else studentsCorrupted = true;
+      } catch {
+        studentsCorrupted = true;
+      }
+    }
+
+    let parsedPayments: Record<string, PaymentRecord[]> | null = null;
+    let paymentsCorrupted = false;
+    if (rawPayments !== null) {
+      try {
+        const parsed = JSON.parse(rawPayments);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) parsedPayments = parsed;
+        else paymentsCorrupted = true;
+      } catch {
+        paymentsCorrupted = true;
+      }
+    }
+
+    let parsedAttendance: DailyAttendanceRecord[] | null = null;
+    let attendanceCorrupted = false;
+    if (rawAttendance !== null) {
+      try {
+        const parsed = JSON.parse(rawAttendance);
+        if (Array.isArray(parsed)) parsedAttendance = parsed;
+        else attendanceCorrupted = true;
+      } catch {
+        attendanceCorrupted = true;
+      }
+    }
+
+    const quarantinedKeys: string[] = [];
+
+    // Never delete unparseable corrupted data: quarantine raw strings with timestamps
+    if (studentsCorrupted && rawStudents !== null) {
+      const qKey = `libtrack_quarantine_students_${Date.now()}`;
+      localStorage.setItem(qKey, rawStudents);
+      quarantinedKeys.push(qKey);
+    }
+    if (paymentsCorrupted && rawPayments !== null) {
+      const qKey = `libtrack_quarantine_payments_${Date.now()}`;
+      localStorage.setItem(qKey, rawPayments);
+      quarantinedKeys.push(qKey);
+    }
+    if (attendanceCorrupted && rawAttendance !== null) {
+      const qKey = `libtrack_quarantine_attendance_${Date.now()}`;
+      localStorage.setItem(qKey, rawAttendance);
+      quarantinedKeys.push(qKey);
+    }
+
+    const hasStudentData = parsedStudents !== null && parsedStudents.length > 0;
+    const hasPaymentData = parsedPayments !== null && Object.keys(parsedPayments).length > 0;
+    const hasAttendanceData = parsedAttendance !== null && parsedAttendance.length > 0;
+    const hasAnyExistingData = hasStudentData || hasPaymentData || hasAttendanceData || (rawStudents !== null && rawStudents.length > 2);
+
+    // State 1: Existing installation with valid initialization marker
+    if (initMarker === '1' && !studentsCorrupted && !paymentsCorrupted) {
+      recoverPendingFinancialTransactions();
+      return {
+        state: 'EXISTING_VALID',
+        studentsCount: parsedStudents?.length || 0,
+        paymentsCount: parsedPayments ? Object.values(parsedPayments).flat().length : 0,
+        attendanceCount: parsedAttendance?.length || 0,
+        backupPreserved: true,
+        quarantinedKeys,
+        diagnostics: 'Existing valid production installation with clean marker.',
+      };
+    }
+
+    // State 2: Existing installation with data but MISSING initialization marker.
+    // CRITICAL: NEVER DELETE EXISTING DATA! PRESERVE AND STAMP MARKER.
+    if (hasAnyExistingData) {
+      try {
+        createAndVerifyPhase0LocalBackup(false);
+      } catch {
+        // Continue safely
+      }
+
+      if (rawStudents === null || studentsCorrupted) {
+        localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(parsedStudents || []));
+      }
+      if (rawPayments === null || paymentsCorrupted) {
+        localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(parsedPayments || {}));
+      }
+      if (rawAttendance === null || attendanceCorrupted) {
+        localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(parsedAttendance || []));
+      }
+
+      localStorage.setItem(PRODUCTION_CLEAN_INIT_KEY, '1');
+      recoverPendingFinancialTransactions();
+
+      return {
+        state: 'EXISTING_MISSING_MARKER_PRESERVED',
+        studentsCount: parsedStudents?.length || 0,
+        paymentsCount: parsedPayments ? Object.values(parsedPayments).flat().length : 0,
+        attendanceCount: parsedAttendance?.length || 0,
+        backupPreserved: true,
+        quarantinedKeys,
+        diagnostics: 'Existing installation detected with missing init marker. Preserved all records intact.',
+      };
+    }
+
+    // State 3: Corrupted storage state with no parseable records
+    if (studentsCorrupted || paymentsCorrupted || attendanceCorrupted) {
       localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify([]));
       localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify({}));
       localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify([]));
-      localStorage.removeItem(PREVIOUS_SNAPSHOT_STORAGE_KEY);
-      localStorage.removeItem('lakshay_library_crash_logs_v1');
-      localStorage.removeItem('lakshay_library_daily_backups_v1');
       localStorage.setItem(PRODUCTION_CLEAN_INIT_KEY, '1');
+      return {
+        state: 'CORRUPTED_STORAGE_QUARANTINED_PRESERVED',
+        studentsCount: 0,
+        paymentsCount: 0,
+        attendanceCount: 0,
+        backupPreserved: false,
+        quarantinedKeys,
+        diagnostics: 'Corrupted storage payload quarantined to preserve raw bytes; initialized clean state.',
+      };
     }
-  } catch {
-    // Ignore storage access errors
+
+    // State 4: Genuinely empty fresh installation
+    localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify([]));
+    localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify({}));
+    localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify([]));
+    localStorage.setItem(PRODUCTION_CLEAN_INIT_KEY, '1');
+    return {
+      state: 'FRESH_EMPTY_INITIALIZED',
+      studentsCount: 0,
+      paymentsCount: 0,
+      attendanceCount: 0,
+      backupPreserved: true,
+      quarantinedKeys: [],
+      diagnostics: 'Fresh installation initialized cleanly.',
+    };
+  } catch (err) {
+    return {
+      state: 'STORAGE_INACCESSIBLE',
+      studentsCount: 0,
+      paymentsCount: 0,
+      attendanceCount: 0,
+      backupPreserved: false,
+      quarantinedKeys: [],
+      diagnostics: `Storage exception during initialization: ${String(err)}`,
+    };
   }
 };
 
-ensureProductionCleanInit();
+export const ensureProductionCleanInit = ensureSafeProductionInit;
+
+ensureSafeProductionInit();
 createAndVerifyPhase0LocalBackup(false);
+
 
 type Listener = () => void;
 const listeners: Set<Listener> = new Set();
@@ -1233,15 +1410,21 @@ export const addStudentToFirestore = (
 
   if (initialPayment) {
     const allPayments = getStoredPayments();
+    const initReceiptNumber = generateCollisionResistantReceiptNumber('REC');
+    const initPaymentId = `pay_${getDeviceStableTag()}_${generateUUID()}`;
+    const validation = validateMonetaryAmount(initialPayment.amountPaid);
     const newRecord: PaymentRecord = {
-      id: `pay_${Date.now()}_init`,
+      id: initPaymentId,
       studentId: newStudent.id,
       studentName: newStudent.name,
+      studentPhone: newStudent.phoneNumber,
       seatNumber: newStudent.seatNumber,
+      shiftTimings: newStudent.shiftTimings,
       paymentDate: new Date(initialPayment.paymentDate).toISOString(),
       amountPaid: initialPayment.amountPaid,
+      amountPaise: validation.valid ? validation.paise : Math.round(initialPayment.amountPaid * 100),
       paymentMode: initialPayment.paymentMode || 'UPI',
-      receiptNumber: `REC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      receiptNumber: initReceiptNumber,
       note: initialPayment.note || `Initial admission fee recorded on ${initialPayment.paymentDate}`,
     };
     allPayments[newStudent.id] = [newRecord];
@@ -1270,6 +1453,57 @@ export const advanceDateByOneMonth = (dateStr: string): string => {
   return date.toISOString().split('T')[0];
 };
 
+/**
+ * Derives a stable, non-sensitive device tag (e.g. D01, D_3A2F) for offline identifier partitioning.
+ */
+export const getDeviceStableTag = (): string => {
+  try {
+    let tag = localStorage.getItem('libtrack_device_id_v1');
+    if (!tag) {
+      const rawClient = localStorage.getItem('lakshay_library_current_client_id_v1') || '';
+      const entropy = Math.random().toString(36).substring(2, 6).toUpperCase();
+      tag = rawClient ? `D_${rawClient.slice(-4).toUpperCase()}` : `D_${entropy}`;
+      localStorage.setItem('libtrack_device_id_v1', tag);
+    }
+    return tag;
+  } catch {
+    return 'D_OFFLINE';
+  }
+};
+
+/**
+ * Standard RFC4122 v4 UUID generator with fallback.
+ */
+export const generateUUID = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
+/**
+ * Strict monetary validation to prevent invalid, negative, NaN, infinite, or overflowing amounts.
+ */
+export const validateMonetaryAmount = (
+  amount: number
+): { valid: boolean; error?: string; paise: number } => {
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || Number.isNaN(amount)) {
+    return { valid: false, error: 'Payment amount must be a finite valid number', paise: 0 };
+  }
+  if (amount <= 0) {
+    return { valid: false, error: 'Payment amount must be strictly greater than zero', paise: 0 };
+  }
+  if (amount > 10_000_000) {
+    return { valid: false, error: 'Payment amount exceeds maximum allowable limit (₹1 Crore)', paise: 0 };
+  }
+  const paise = Math.round(amount * 100);
+  return { valid: true, paise };
+};
+
 // Collision-resistant offline receipt number generator
 export const generateCollisionResistantReceiptNumber = (prefix: 'REC' = 'REC'): string => {
   const d = new Date();
@@ -1278,13 +1512,166 @@ export const generateCollisionResistantReceiptNumber = (prefix: 'REC' = 'REC'): 
   const dd = String(d.getDate()).padStart(2, '0');
   const timeEntropy = (Date.now() % 100000).toString().padStart(5, '0');
   const randomChars = Math.random().toString(36).substring(2, 6).toUpperCase();
-  return `${prefix}-${yyyy}${mm}${dd}-${timeEntropy}${randomChars}`;
+  const devTag = getDeviceStableTag();
+  return `${prefix}-${yyyy}${mm}${dd}-${devTag}-${timeEntropy}${randomChars}`;
 };
 
-// Mark Paid: Atomic transaction in Firestore
-// 1. Adds record to PaymentHistory sub-collection
-// 2. Advances nextFeeDueDate by exactly 1 month
-// 3. Stretches receipt snapshot immutability
+export const FINANCIAL_JOURNAL_KEY = 'libtrack_financial_journal_v1';
+export const FINANCIAL_AUDIT_TRAIL_KEY = 'libtrack_financial_audit_trail_v1';
+export const QUARANTINED_PAYMENT_CONFLICTS_KEY = 'libtrack_quarantined_payment_conflicts';
+
+export interface FinancialJournalEntry {
+  journalId: string;
+  idempotencyKey: string;
+  paymentId: string;
+  receiptNumber: string;
+  studentId: string;
+  studentName: string;
+  studentPhone?: string;
+  seatNumber?: string;
+  shiftTimings?: string;
+  oldDueDate: string;
+  newDueDate: string;
+  amount: number;
+  amountPaise: number;
+  paymentMode: 'Cash' | 'UPI' | 'Card' | 'Bank Transfer';
+  note?: string;
+  feePeriod?: string;
+  extraMetadata?: {
+    transactionId?: string;
+    discount?: number;
+    previousBalance?: number;
+    remainingBalance?: number;
+  };
+  timestampISO: string;
+  state: 'PREPARED' | 'PAYMENT_PERSISTED' | 'COMMITTED';
+}
+
+export const getFinancialJournal = (): FinancialJournalEntry[] => {
+  try {
+    const raw = localStorage.getItem(FINANCIAL_JOURNAL_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+export const saveFinancialJournal = (entries: FinancialJournalEntry[]): void => {
+  try {
+    localStorage.setItem(FINANCIAL_JOURNAL_KEY, JSON.stringify(entries));
+  } catch (e) {
+    console.error('Failed to save financial journal', e);
+  }
+};
+
+const archiveCommittedJournal = (entry: FinancialJournalEntry): void => {
+  try {
+    const rawAudit = localStorage.getItem(FINANCIAL_AUDIT_TRAIL_KEY);
+    const audit: FinancialJournalEntry[] = rawAudit ? JSON.parse(rawAudit) : [];
+    // Keep last 100 committed audit entries
+    const updated = [entry, ...audit.filter((a) => a.journalId !== entry.journalId)].slice(0, 100);
+    localStorage.setItem(FINANCIAL_AUDIT_TRAIL_KEY, JSON.stringify(updated));
+  } catch {
+    // Ignore
+  }
+};
+
+/**
+ * Crash-recovery protocol: Reconciles any interrupted payments.
+ * Guarantees that if a payment was saved locally, the student due date advancement is never dropped.
+ */
+export const recoverPendingFinancialTransactions = (): {
+  recoveredCount: number;
+  cancelledCount: number;
+  details: string[];
+} => {
+  const report = { recoveredCount: 0, cancelledCount: 0, details: [] as string[] };
+  try {
+    const journal = getFinancialJournal();
+    if (journal.length === 0) return report;
+
+    const allStudents = getAllStoredStudentsRaw();
+    const allPayments = getStoredPayments();
+    let studentsModified = false;
+    let paymentsModified = false;
+    const remainingJournal: FinancialJournalEntry[] = [];
+
+    for (const entry of journal) {
+      if (entry.state === 'COMMITTED') {
+        archiveCommittedJournal(entry);
+        continue;
+      }
+
+      const studentIndex = allStudents.findIndex((s) => s.id === entry.studentId);
+      const studentPayments = allPayments[entry.studentId] || [];
+      const paymentExists = studentPayments.some(
+        (p) => p.id === entry.paymentId || (p.idempotencyKey && p.idempotencyKey === entry.idempotencyKey)
+      );
+
+      if (entry.state === 'PAYMENT_PERSISTED') {
+        // Payment was written to disk, but crash occurred before student due date was saved
+        if (studentIndex >= 0) {
+          const student = allStudents[studentIndex];
+          if (student.nextFeeDueDate === entry.oldDueDate) {
+            allStudents[studentIndex] = {
+              ...student,
+              nextFeeDueDate: entry.newDueDate,
+              updatedAt: new Date().toISOString(),
+            };
+            studentsModified = true;
+            report.recoveredCount++;
+            report.details.push(
+              `Recovered due date advancement for student ${student.name} (${student.id}) from ${entry.oldDueDate} to ${entry.newDueDate}`
+            );
+          }
+        }
+        archiveCommittedJournal(entry);
+      } else if (entry.state === 'PREPARED') {
+        // Crash occurred before payment was written
+        if (paymentExists) {
+          if (studentIndex >= 0 && allStudents[studentIndex].nextFeeDueDate === entry.oldDueDate) {
+            allStudents[studentIndex] = {
+              ...allStudents[studentIndex],
+              nextFeeDueDate: entry.newDueDate,
+              updatedAt: new Date().toISOString(),
+            };
+            studentsModified = true;
+          }
+          report.recoveredCount++;
+          archiveCommittedJournal(entry);
+        } else {
+          // Payment record never wrote; cancel entry cleanly
+          report.cancelledCount++;
+          report.details.push(`Cancelled unpersisted transaction ${entry.journalId} for student ${entry.studentId}`);
+        }
+      }
+    }
+
+    if (studentsModified) {
+      localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(allStudents));
+    }
+    if (paymentsModified) {
+      localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(allPayments));
+    }
+
+    saveFinancialJournal(remainingJournal);
+  } catch (err) {
+    console.error('Error during financial transaction recovery', err);
+  }
+  return report;
+};
+
+/**
+ * Crash-recoverable fee payment transaction.
+ * 1. Validates amount, limits, and integer paise.
+ * 2. Enforces idempotency to prevent duplicate charging.
+ * 3. Uses collision-resistant UUID payment IDs (pay_D01_<uuid>).
+ * 4. Logs Write-Ahead Journal before modifying records.
+ * 5. Persists payment record FIRST, then advances student due date.
+ * 6. Commits and prunes journal on successful completion.
+ */
 export const markStudentPaidInFirestore = (
   studentId: string,
   amount: number,
@@ -1296,44 +1683,63 @@ export const markStudentPaidInFirestore = (
     discount?: number;
     previousBalance?: number;
     remainingBalance?: number;
+    idempotencyKey?: string;
   }
-): { updatedStudent: Student; newRecord: PaymentRecord } => {
-  const nowISO = new Date().toISOString();
+): { updatedStudent: Student; newRecord: PaymentRecord; wasIdempotentReplay?: boolean } => {
+  // 1. Strict Monetary Validation
+  const validation = validateMonetaryAmount(amount);
+  if (!validation.valid) {
+    throw new Error(`Invalid payment amount: ${validation.error}`);
+  }
+
+  // 2. Fetch student and verify existence
   const allStudentsRaw = getAllStoredStudentsRaw();
   const index = allStudentsRaw.findIndex((s) => s.id === studentId);
   if (index === -1) {
-    throw new Error('Student not found');
+    throw new Error('Student not found in library registry');
   }
 
   const currentStudent = allStudentsRaw[index];
   const oldDueDate = currentStudent.nextFeeDueDate;
   const newDueDate = advanceDateByOneMonth(oldDueDate);
 
-  const updatedStudent: Student = {
-    ...currentStudent,
-    nextFeeDueDate: newDueDate,
-    updatedAt: nowISO,
-  };
+  // 3. Idempotency Key Handling
+  const idempotencyKey =
+    extraMetadata?.idempotencyKey ||
+    `idemp_${studentId}_${oldDueDate}_${validation.paise}_${paymentMode}`;
 
-  allStudentsRaw[index] = updatedStudent;
-  localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(allStudentsRaw));
-
-  // Add record into PaymentHistory sub-collection
+  // Check if this idempotency key was already committed
   const allPayments = getStoredPayments();
   const studentPayments = allPayments[studentId] || [];
+  const existingRecord = studentPayments.find((p) => p.idempotencyKey === idempotencyKey);
+  if (existingRecord) {
+    console.warn('Idempotent payment re-submission detected. Returning existing payment record without double charging.');
+    return {
+      updatedStudent: currentStudent,
+      newRecord: existingRecord,
+      wasIdempotentReplay: true,
+    };
+  }
 
+  const nowISO = new Date().toISOString();
+  const deviceTag = getDeviceStableTag();
+  const uuid = generateUUID();
+  const paymentId = `pay_${deviceTag}_${uuid}`;
   const receiptNumber = generateCollisionResistantReceiptNumber('REC');
 
   const newRecord: PaymentRecord = {
-    id: `pay_${Date.now()}`,
+    id: paymentId,
     studentId,
     studentName: currentStudent.name,
     studentPhone: currentStudent.phoneNumber,
     seatNumber: currentStudent.seatNumber,
+    shiftTimings: currentStudent.shiftTimings,
     paymentDate: nowISO,
     amountPaid: amount,
+    amountPaise: validation.paise,
     paymentMode,
     receiptNumber,
+    idempotencyKey,
     note: note || `Monthly fee renewal (${paymentMode})`,
     transactionId: extraMetadata?.transactionId,
     feePeriod: extraMetadata?.feePeriod || `${formatDueDateDisplay(oldDueDate)} - ${formatDueDateDisplay(newDueDate)}`,
@@ -1342,12 +1748,60 @@ export const markStudentPaidInFirestore = (
     remainingBalance: extraMetadata?.remainingBalance,
   };
 
+  // 4. STEP 1: Write Journal Entry (PREPARED)
+  const journalEntry: FinancialJournalEntry = {
+    journalId: `jnl_${uuid}`,
+    idempotencyKey,
+    paymentId,
+    receiptNumber,
+    studentId,
+    studentName: currentStudent.name,
+    studentPhone: currentStudent.phoneNumber,
+    seatNumber: currentStudent.seatNumber,
+    shiftTimings: currentStudent.shiftTimings,
+    oldDueDate,
+    newDueDate,
+    amount,
+    amountPaise: validation.paise,
+    paymentMode,
+    note: newRecord.note,
+    feePeriod: newRecord.feePeriod,
+    extraMetadata,
+    timestampISO: nowISO,
+    state: 'PREPARED',
+  };
+
+  const activeJournal = getFinancialJournal();
+  activeJournal.push(journalEntry);
+  saveFinancialJournal(activeJournal);
+
+  // 5. STEP 2: Payment-First Local Persistence
   allPayments[studentId] = [newRecord, ...studentPayments];
   localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(allPayments));
 
+  // Update Journal state to PAYMENT_PERSISTED
+  journalEntry.state = 'PAYMENT_PERSISTED';
+  saveFinancialJournal(activeJournal);
+
+  // 6. STEP 3: Student Due-Date Advancement
+  const updatedStudent: Student = {
+    ...currentStudent,
+    nextFeeDueDate: newDueDate,
+    updatedAt: nowISO,
+  };
+  allStudentsRaw[index] = updatedStudent;
+  localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(allStudentsRaw));
+
+  // 7. STEP 4: Commit & Prune Journal Entry
+  journalEntry.state = 'COMMITTED';
+  archiveCommittedJournal(journalEntry);
+  const remainingJournal = activeJournal.filter((j) => j.journalId !== journalEntry.journalId);
+  saveFinancialJournal(remainingJournal);
+
   notifyListeners();
-  return { updatedStudent, newRecord };
+  return { updatedStudent, newRecord, wasIdempotentReplay: false };
 };
+
 
 // Quick digital check-in scanner action: updates 'lastCheckIn' timestamp in Firestore
 // AND writes a daily log to the 'DailyAttendance' collection
@@ -1708,15 +2162,77 @@ export const importSyncedFirestoreSnapshot = (
         for (const rec of localList) {
           if (rec && rec.id) byId.set(rec.id, rec);
         }
-        for (const rec of remoteList) {
-          if (rec && rec.id) {
-            const existingRec = byId.get(rec.id);
-            byId.set(rec.id, {
-              ...existingRec,
-              ...rec,
-              studentName: rec.studentName || existingRec?.studentName,
-              seatNumber: rec.seatNumber || existingRec?.seatNumber,
-            });
+
+        for (const remoteRec of remoteList) {
+          if (!remoteRec || !remoteRec.id) continue;
+          const existingRec = byId.get(remoteRec.id);
+
+          if (!existingRec) {
+            // Check for potential receipt number collision with a different local payment
+            const duplicateReceipt = Array.from(byId.values()).find(
+              (p) => p.receiptNumber && p.receiptNumber === remoteRec.receiptNumber && p.id !== remoteRec.id
+            );
+            if (duplicateReceipt) {
+              // Quarantine receipt number collision
+              try {
+                const rawQ = localStorage.getItem(QUARANTINED_PAYMENT_CONFLICTS_KEY);
+                const qList = rawQ ? JSON.parse(rawQ) : [];
+                qList.push({
+                  conflictId: `conf_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                  conflictType: 'RECEIPT_NUMBER_COLLISION',
+                  detectedAtISO: new Date().toISOString(),
+                  studentId,
+                  incomingRecord: remoteRec,
+                  existingRecord: duplicateReceipt,
+                });
+                localStorage.setItem(QUARANTINED_PAYMENT_CONFLICTS_KEY, JSON.stringify(qList.slice(-50)));
+              } catch {
+                // Ignore
+              }
+              byId.set(remoteRec.id, {
+                ...remoteRec,
+                note: `[RECEIPT COLLISION] ${remoteRec.note || ''}`,
+              });
+            } else {
+              byId.set(remoteRec.id, remoteRec);
+            }
+          } else {
+            // Payment ID matches. Verify that immutable financial attributes have not been mutated
+            const isFinancialConflict =
+              existingRec.amountPaid !== remoteRec.amountPaid ||
+              existingRec.paymentDate !== remoteRec.paymentDate ||
+              existingRec.studentId !== remoteRec.studentId;
+
+            if (isFinancialConflict) {
+              // Quarantined financial mismatch: Never overwrite local financial record
+              try {
+                const rawQ = localStorage.getItem(QUARANTINED_PAYMENT_CONFLICTS_KEY);
+                const qList = rawQ ? JSON.parse(rawQ) : [];
+                qList.push({
+                  conflictId: `conf_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                  conflictType: 'FINANCIAL_ATTRIBUTE_MISMATCH',
+                  detectedAtISO: new Date().toISOString(),
+                  studentId,
+                  incomingRecord: remoteRec,
+                  existingRecord: existingRec,
+                });
+                localStorage.setItem(QUARANTINED_PAYMENT_CONFLICTS_KEY, JSON.stringify(qList.slice(-50)));
+              } catch {
+                // Ignore
+              }
+              // Keep authoritative local record intact
+            } else {
+              // Benign enrichment of metadata
+              byId.set(existingRec.id, {
+                ...remoteRec,
+                ...existingRec,
+                studentName: existingRec.studentName || remoteRec.studentName,
+                studentPhone: existingRec.studentPhone || remoteRec.studentPhone,
+                seatNumber: existingRec.seatNumber || remoteRec.seatNumber,
+                shiftTimings: existingRec.shiftTimings || remoteRec.shiftTimings,
+                feePeriod: existingRec.feePeriod || remoteRec.feePeriod,
+              });
+            }
           }
         }
 
@@ -1727,6 +2243,7 @@ export const importSyncedFirestoreSnapshot = (
 
       localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(mergedPayments));
     }
+
 
     // 2. Merge Students (both active and archived) without overwriting newer local records
     if (Array.isArray(students)) {

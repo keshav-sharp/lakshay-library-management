@@ -43,6 +43,11 @@ A production-grade, offline-first library and study hall management system built
     - Built-in 100% offline A4 PDF fee receipt generator using `jsPDF` with immutable point-in-time snapshots, amount in words (`amountToWordsINR`), direct iframe printing, and WhatsApp text summaries.
     - Added customizable library address, phone, email, and receipt terms under Settings.
     - Retired active Attendance interface and QR scanner while preserving 100% of historical attendance records in storage for backup and `LKSYNC1` compatibility.
+13. **Data Safety, Safe Storage Initialization & Financial Transaction Stability (`v2.0.9`)**:
+    - Replaced legacy destructive storage initialization with `ensureSafeProductionInit` supporting 6 non-destructive states, verified local backups, and timestamped quarantine of corrupted data.
+    - Implemented a Write-Ahead Financial Journal with 2-phase commit and startup crash recovery (`recoverPendingFinancialTransactions()`) ensuring 100% parity between student due dates and payment history.
+    - Enforced client idempotency key tracking, collision-resistant device-partitioned UUIDs (`pay_D01_<uuid>`), strict monetary validation with integer paise, audited Indian Rupee amount-to-words, and hardened Capacitor navigation.
+
 
 ---
 
@@ -194,6 +199,8 @@ Curious about the technical challenges we solved while building this app across 
 | **[#13](https://github.com/keshav-sharp/lakshay-library-management/issues/13)** | Vice-Versa Sync | Enabled bidirectional multi-device consecutive sync: Primary ⇄ Secondary ⇄ Third device real-time updates | `v2.0.6` |
 | **[#14](https://github.com/keshav-sharp/lakshay-library-management/issues/14)** | Mobile UI & Security | Enforced zero-horizontal-scroll viewport containment, built dedicated Help & FAQ Center, moved palette under Settings, cross-synced UPI config, and set up GitHub security policy | `v2.0.7` |
 | **[#15](https://github.com/keshav-sharp/lakshay-library-management/issues/15)** | Financial Ledger & Receipts | Built 100% offline client-side PDF Fee Receipts (jsPDF) with immutable snapshots, customizable library settings, and retired active attendance UI while preserving historical records | `v2.0.8` |
+| **[#16](https://github.com/keshav-sharp/lakshay-library-management/issues/16)** | Data Safety & Financial Integrity | Fixed storage wiping on missing marker via `ensureSafeProductionInit`, built Write-Ahead Financial Journal with 2-phase commit & crash recovery, added idempotency & UUIDs | `v2.0.9` |
+
 
 ---
 

@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import { PaymentRecord, Student } from '../types/student';
 import { LibraryProfileSettings, getLibraryProfileSettings } from './librarySettingsService';
 import { amountToWordsINR } from '../utils/numberToWords';
+import { APP_VERSION } from '../constants/version';
 
 export interface ReceiptPdfResult {
   doc: jsPDF;
@@ -132,8 +133,9 @@ export const buildReceiptPdfDoc = (
   const studentName = record.studentName || student?.name || 'Library Student';
   const seatNumber = record.seatNumber || student?.seatNumber || 'N/A';
   const studentId = record.studentId || student?.id || 'N/A';
-  const shiftTimings = student?.shiftTimings || 'Regular Shift';
-  const contactPhone = student?.phoneNumber || '—';
+  const shiftTimings = record.shiftTimings || student?.shiftTimings || 'Regular Shift';
+  const contactPhone = record.studentPhone || student?.phoneNumber || '—';
+
 
   doc.setFontSize(8.5);
   // Column 1
@@ -297,7 +299,7 @@ export const buildReceiptPdfDoc = (
   const footerY = pageHeight - margin - 4;
   doc.setFontSize(7);
   doc.setTextColor(148, 163, 184);
-  doc.text('This is an authentic computer-generated digital receipt from Lakshay Library Management (LibTrack v2.0.7).', margin + 6, footerY);
+  doc.text(`This is an authentic computer-generated digital receipt from Lakshay Library Management (LibTrack ${APP_VERSION}).`, margin + 6, footerY);
   doc.text(`Ref: ${record.receiptNumber || record.id}`, pageWidth - margin - 6, footerY, { align: 'right' });
 
   return doc;

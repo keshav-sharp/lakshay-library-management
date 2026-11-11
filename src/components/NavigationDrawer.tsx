@@ -23,8 +23,10 @@ import {
   HelpCircle,
 } from 'lucide-react';
 
-export const APP_VERSION = 'v2.0.8';
+import { APP_VERSION } from '../constants/version';
+export { APP_VERSION };
 export const GITHUB_REPO_URL = 'https://github.com/keshav-sharp/lakshay-library-management';
+
 
 export interface DrawerMenuItem {
   id: string;
