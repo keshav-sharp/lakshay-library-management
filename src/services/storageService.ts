@@ -1572,7 +1572,7 @@ export const addStudentToFirestore = (
     saveFinancialJournal(activeJournal);
 
     allPayments[newStudent.id] = [newRecord];
-    localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(allPayments));
+    writeAndVerifyFinancialStore(PAYMENTS_STORAGE_KEY, allPayments);
 
     journalEntry.state = 'COMMITTED';
     archiveCommittedJournal(journalEntry);
@@ -1729,8 +1729,22 @@ export const saveFinancialJournal = (entries: FinancialJournalEntry[]): boolean 
     }
     return true;
   } catch (e) {
+    setRecoveryOnlyMode(true);
     console.error('CRITICAL: Failed to save or verify financial journal', e);
     throw new Error(`Financial journal persistence failure: ${e instanceof Error ? e.message : String(e)}`);
+  }
+};
+
+const writeAndVerifyFinancialStore = (key: string, value: unknown): void => {
+  const serialized = JSON.stringify(value);
+  try {
+    localStorage.setItem(key, serialized);
+    if (localStorage.getItem(key) !== serialized) {
+      throw new Error(`Persistence verification failed for ${key}.`);
+    }
+  } catch (error) {
+    setRecoveryOnlyMode(true);
+    throw error;
   }
 };
 
@@ -1747,9 +1761,9 @@ const archiveCommittedJournal = (entry: FinancialJournalEntry): void => {
   const serialized = JSON.stringify(updated);
   localStorage.setItem(FINANCIAL_AUDIT_TRAIL_KEY, serialized);
   if (localStorage.getItem(FINANCIAL_AUDIT_TRAIL_KEY) !== serialized) {
+    setRecoveryOnlyMode(true);
     throw new Error('Financial audit trail persistence verification failed.');
   }
-}
 
 /**
  * Crash-recovery protocol: Reconciles any interrupted payments.
@@ -1998,7 +2012,7 @@ export const markStudentPaidInFirestore = (
     updatedAt: nowISO,
   };
   allStudentsRaw[index] = updatedStudent;
-  localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(allStudentsRaw));
+  writeAndVerifyFinancialStore(STUDENTS_STORAGE_KEY, allStudentsRaw);
 
   // 7. STEP 4: Commit & Prune Journal Entry
   journalEntry.state = 'COMMITTED';
