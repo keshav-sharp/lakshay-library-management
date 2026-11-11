@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx scripts/test-v209-integrity.cjs",
+    "test": "NODE_ENV=test tsx scripts/test-v209-integrity.cjs",
     "postinstall": "node scripts/apply-android-icon.cjs || true",
     "capacitor:copy:after": "node scripts/apply-android-icon.cjs",
     "capacitor:sync:after": "node scripts/apply-android-icon.cjs"

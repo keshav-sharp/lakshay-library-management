@@ -519,6 +519,34 @@ runTest('12. Cross-device backup encryption and decryption via shared passphrase
   setStaffPassphrase('test-passphrase-alpha-123');
 });
 
+runTest('13. Separate-device backup import with distinct local salt succeeds with portable KDF metadata', () => {
+  const sharedKey = 'enterprise-staff-shared-key-2026';
+  // Device A creates backup with Device A's salt
+  localStorage.setItem('libtrack_device_storage_salt_v2', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+  setStaffPassphrase(sharedKey);
+  const backupData = JSON.stringify({
+    students: [{ id: 'std_dev_a', name: 'Device A Student', nextFeeDueDate: '2026-12-01' }],
+    payments: { std_dev_a: [{ id: 'pay_a', amountPaid: 1000 }] },
+    journal: []
+  });
+  const exportedCt = encryptStoragePayload(backupData);
+
+  // Device B has a DIFFERENT salt in localStorage
+  localStorage.setItem('libtrack_device_storage_salt_v2', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
+  setStaffPassphrase(sharedKey);
+  const importedPt = decryptStoragePayload(exportedCt);
+  assert.strictEqual(importedPt, backupData);
+
+  // Wrong passphrase on Device B must fail
+  assert.throws(() => decryptStoragePayload(exportedCt, 'wrong-passphrase-invalid'), StorageCryptoError);
+
+  // Tampered ciphertext must fail authentication
+  const tamperedCt = exportedCt.substring(0, exportedCt.length - 4) + '0000';
+  assert.throws(() => decryptStoragePayload(tamperedCt, sharedKey), StorageCryptoError);
+
+  setStaffPassphrase('test-passphrase-alpha-123');
+});
+
 console.log('\n====================================================');
 console.log(`Results: ${testsPassed} passed, ${testsFailed} failed.`);
 console.log('====================================================');

@@ -66,13 +66,21 @@ const getDeviceStorageSalt = (): string => {
   return salt;
 };
 
-const getDerivedAesKeyBytes = (customPassphrase?: string): Uint8Array => {
-  const salt = getDeviceStorageSalt();
+const getPBKDF2Iterations = (): number => {
+  if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'test') {
+    return 1000;
+  }
+  return 210000;
+};
+
+const getDerivedAesKeyBytes = (customPassphrase?: string, customSalt?: string): Uint8Array => {
+  const salt = customSalt || getDeviceStorageSalt();
   const passphrase = customPassphrase || getStaffPassphrase();
-  // PBKDF2 with 210,000 iterations (OWASP recommended standard)
+  // PBKDF2 with 210,000 iterations in production (OWASP recommended standard)
+  const iterations = getPBKDF2Iterations();
   const derivedHex = CryptoJS.PBKDF2(passphrase, salt, {
     keySize: 256 / 32,
-    iterations: 210000
+    iterations
   }).toString();
 
   const keyBytes = new Uint8Array(32);
@@ -97,13 +105,14 @@ const hexToBytes = (hex: string): Uint8Array => {
   return bytes;
 };
 
-export const encryptStoragePayload = (plaintext: string, customPassphrase?: string): string => {
+export const encryptStoragePayload = (plaintext: string, customPassphrase?: string, customSalt?: string): string => {
   try {
     if (plaintext === '' || plaintext === undefined || plaintext === null) return '';
     if (typeof plaintext !== 'string') {
       plaintext = JSON.stringify(plaintext);
     }
-    const keyBytes = getDerivedAesKeyBytes(customPassphrase);
+    const saltHex = customSalt || getDeviceStorageSalt();
+    const keyBytes = getDerivedAesKeyBytes(customPassphrase, saltHex);
     const cryptoObj = getCrypto();
 
     // 12-byte cryptographically random nonce (96 bits)
@@ -117,7 +126,7 @@ export const encryptStoragePayload = (plaintext: string, customPassphrase?: stri
     const ivHex = bytesToHex(ivBytes);
     const ciphertextHex = bytesToHex(ciphertextBytes);
 
-    return `AESGCM_GCM_V2:${ivHex}:${ciphertextHex}`;
+    return `AESGCM_GCM_V2:${saltHex}:${ivHex}:${ciphertextHex}`;
   } catch (err) {
     if (err instanceof StorageCryptoError) throw err;
     throw new StorageCryptoError(`Genuine AES-256-GCM encryption failed: ${String(err)}`, 'ENCRYPTION_FAILED');
@@ -135,12 +144,25 @@ export const decryptStoragePayload = (payload: string, customPassphrase?: string
   }
 
   const parts = payload.split(':');
-  if (parts.length !== 3) {
+  let saltHex: string;
+  let ivHex: string;
+  let ciphertextHex: string;
+
+  if (parts.length === 4) {
+    saltHex = parts[1];
+    ivHex = parts[2];
+    ciphertextHex = parts[3];
+  } else if (parts.length === 3) {
+    saltHex = getDeviceStorageSalt();
+    ivHex = parts[1];
+    ciphertextHex = parts[2];
+  } else {
     throw new StorageCryptoError('Corrupt ciphertext format: missing envelope parts.', 'CORRUPT_CIPHERTEXT');
   }
 
-  const ivHex = parts[1];
-  const ciphertextHex = parts[2];
+  if (saltHex.length !== 32) {
+    throw new StorageCryptoError('Invalid salt length: expected 32 hex characters.', 'CORRUPT_CIPHERTEXT');
+  }
 
   if (ivHex.length !== 24) {
     throw new StorageCryptoError('Invalid nonce length: expected 24 hex characters (12 bytes).', 'CORRUPT_CIPHERTEXT');
@@ -150,7 +172,7 @@ export const decryptStoragePayload = (payload: string, customPassphrase?: string
     throw new StorageCryptoError('Truncated ciphertext payload.', 'CORRUPT_CIPHERTEXT');
   }
 
-  const keyBytes = getDerivedAesKeyBytes(customPassphrase);
+  const keyBytes = getDerivedAesKeyBytes(customPassphrase, saltHex);
   const ivBytes = hexToBytes(ivHex);
   const ciphertextBytes = hexToBytes(ciphertextHex);
 
