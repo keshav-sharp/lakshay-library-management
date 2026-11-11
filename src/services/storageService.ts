@@ -1060,7 +1060,8 @@ export const isRecoveryOnlyMode = (): boolean => {
   try {
     return localStorage.getItem(RECOVERY_ONLY_MODE_KEY) === '1';
   } catch {
-    return false;
+    // Storage availability is unknown: fail closed so writes cannot proceed.
+    return true;
   }
 };
 export const setRecoveryOnlyMode = (active: boolean): void => {
