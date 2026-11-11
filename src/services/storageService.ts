@@ -1129,13 +1129,47 @@ export const ensureSafeProductionInit = (): SafeInitReport => {
       quarantinedKeys.push(qKey);
     }
 
+
     const hasStudentData = parsedStudents !== null && parsedStudents.length > 0;
     const hasPaymentData = parsedPayments !== null && Object.keys(parsedPayments).length > 0;
     const hasAttendanceData = parsedAttendance !== null && parsedAttendance.length > 0;
     const hasAnyExistingData = hasStudentData || hasPaymentData || hasAttendanceData || (rawStudents !== null && rawStudents.length > 2);
 
-    // State 1: Existing installation with valid initialization marker
-    if (initMarker === '1' && !studentsCorrupted && !paymentsCorrupted) {
+    // State 1: Partial or Corrupted storage state. Preserve valid data, quarantine corrupt payloads, and prevent destructive reset.
+    if (studentsCorrupted || paymentsCorrupted || attendanceCorrupted) {
+      if (parsedStudents && !studentsCorrupted) {
+        localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(parsedStudents));
+      } else if (rawStudents !== null) {
+        localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify([]));
+      }
+
+      if (parsedPayments && !paymentsCorrupted) {
+        localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(parsedPayments));
+      } else if (rawPayments !== null) {
+        localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify({}));
+      }
+
+      if (parsedAttendance && !attendanceCorrupted) {
+        localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(parsedAttendance));
+      } else if (rawAttendance !== null) {
+        localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify([]));
+      }
+
+
+      localStorage.setItem(PRODUCTION_CLEAN_INIT_KEY, '1');
+      return {
+        state: 'CORRUPTED_STORAGE_QUARANTINED_PRESERVED',
+        studentsCount: parsedStudents?.length || 0,
+        paymentsCount: parsedPayments ? Object.values(parsedPayments).flat().length : 0,
+        attendanceCount: parsedAttendance?.length || 0,
+        backupPreserved: false,
+        quarantinedKeys,
+        diagnostics: 'Corrupted storage payload quarantined to preserve raw bytes; valid subset recovered.',
+      };
+    }
+
+    // State 2: Existing installation with valid initialization marker
+    if (initMarker === '1') {
       recoverPendingFinancialTransactions();
       return {
         state: 'EXISTING_VALID',
@@ -1147,6 +1181,7 @@ export const ensureSafeProductionInit = (): SafeInitReport => {
         diagnostics: 'Existing valid production installation with clean marker.',
       };
     }
+
 
     // State 2: Existing installation with data but MISSING initialization marker.
     // CRITICAL: NEVER DELETE EXISTING DATA! PRESERVE AND STAMP MARKER.
@@ -1181,22 +1216,48 @@ export const ensureSafeProductionInit = (): SafeInitReport => {
       };
     }
 
-    // State 3: Corrupted storage state with no parseable records
+    // State 3: Partial or Corrupted storage state. Preserve valid data, quarantine corrupt payloads, and prevent destructive reset.
     if (studentsCorrupted || paymentsCorrupted || attendanceCorrupted) {
-      localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify([]));
-      localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify({}));
-      localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify([]));
+      // Restore valid subsets if present, quarantine invalid keys
+      if (parsedStudents && !studentsCorrupted) {
+        localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(parsedStudents));
+      } else if (rawStudents !== null) {
+        const qKey = `libtrack_quarantine_students_raw_${Date.now()}`;
+        localStorage.setItem(qKey, rawStudents);
+        quarantinedKeys.push(qKey);
+        localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify([]));
+      }
+
+      if (parsedPayments && !paymentsCorrupted) {
+        localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(parsedPayments));
+      } else if (rawPayments !== null) {
+        const qKey = `libtrack_quarantine_payments_raw_${Date.now()}`;
+        localStorage.setItem(qKey, rawPayments);
+        quarantinedKeys.push(qKey);
+        localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify({}));
+      }
+
+      if (parsedAttendance && !attendanceCorrupted) {
+        localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(parsedAttendance));
+      } else if (rawAttendance !== null) {
+        const qKey = `libtrack_quarantine_attendance_raw_${Date.now()}`;
+        localStorage.setItem(qKey, rawAttendance);
+        quarantinedKeys.push(qKey);
+        localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify([]));
+      }
+
       localStorage.setItem(PRODUCTION_CLEAN_INIT_KEY, '1');
       return {
         state: 'CORRUPTED_STORAGE_QUARANTINED_PRESERVED',
-        studentsCount: 0,
-        paymentsCount: 0,
-        attendanceCount: 0,
+        studentsCount: parsedStudents?.length || 0,
+        paymentsCount: parsedPayments ? Object.values(parsedPayments).flat().length : 0,
+        attendanceCount: parsedAttendance?.length || 0,
         backupPreserved: false,
         quarantinedKeys,
-        diagnostics: 'Corrupted storage payload quarantined to preserve raw bytes; initialized clean state.',
+        diagnostics: 'Corrupted storage payload quarantined to preserve raw bytes; valid subset recovered.',
       };
     }
+
 
     // State 4: Genuinely empty fresh installation
     localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify([]));
@@ -1409,10 +1470,18 @@ export const addStudentToFirestore = (
   localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(updated));
 
   if (initialPayment) {
+    const validation = validateMonetaryAmount(initialPayment.amountPaid);
+    if (!validation.valid) {
+      throw new Error(`Invalid initial admission payment amount: ${validation.error}`);
+    }
+
     const allPayments = getStoredPayments();
     const initReceiptNumber = generateCollisionResistantReceiptNumber('REC');
-    const initPaymentId = `pay_${getDeviceStableTag()}_${generateUUID()}`;
-    const validation = validateMonetaryAmount(initialPayment.amountPaid);
+    const deviceTag = getDeviceStableTag();
+    const uuid = generateUUID();
+    const initPaymentId = `pay_${deviceTag}_${uuid}`;
+    const idempotencyKey = `idemp_init_${newStudent.id}_${validation.paise}`;
+
     const newRecord: PaymentRecord = {
       id: initPaymentId,
       studentId: newStudent.id,
@@ -1422,18 +1491,54 @@ export const addStudentToFirestore = (
       shiftTimings: newStudent.shiftTimings,
       paymentDate: new Date(initialPayment.paymentDate).toISOString(),
       amountPaid: initialPayment.amountPaid,
-      amountPaise: validation.valid ? validation.paise : Math.round(initialPayment.amountPaid * 100),
+      amountPaise: validation.paise,
       paymentMode: initialPayment.paymentMode || 'UPI',
       receiptNumber: initReceiptNumber,
+      idempotencyKey,
       note: initialPayment.note || `Initial admission fee recorded on ${initialPayment.paymentDate}`,
     };
+
+    // Write financial journal entry for admission payment
+    const journalEntry: FinancialJournalEntry = {
+      journalId: `jnl_init_${uuid}`,
+      idempotencyKey,
+      paymentId: initPaymentId,
+      receiptNumber: initReceiptNumber,
+      studentId: newStudent.id,
+      studentName: newStudent.name,
+      studentPhone: newStudent.phoneNumber,
+      seatNumber: newStudent.seatNumber,
+      shiftTimings: newStudent.shiftTimings,
+      oldDueDate: newStudent.admissionDate,
+      newDueDate: newStudent.nextFeeDueDate,
+      amount: initialPayment.amountPaid,
+      amountPaise: validation.paise,
+      paymentMode: initialPayment.paymentMode || 'UPI',
+      note: newRecord.note,
+      timestampISO: nowISO,
+      state: 'PREPARED',
+    };
+
+    const activeJournal = getFinancialJournal();
+    activeJournal.push(journalEntry);
+    saveFinancialJournal(activeJournal);
+
+    journalEntry.state = 'PAYMENT_PERSISTED';
+    saveFinancialJournal(activeJournal);
+
     allPayments[newStudent.id] = [newRecord];
     localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(allPayments));
+
+    journalEntry.state = 'COMMITTED';
+    archiveCommittedJournal(journalEntry);
+    const remainingJournal = activeJournal.filter((j) => j.journalId !== journalEntry.journalId);
+    saveFinancialJournal(remainingJournal);
   }
 
   notifyListeners();
   return newStudent;
 };
+
 
 // Advance date by exactly 1 calendar month
 export const advanceDateByOneMonth = (dateStr: string): string => {
@@ -1558,13 +1663,21 @@ export const getFinancialJournal = (): FinancialJournalEntry[] => {
   }
 };
 
-export const saveFinancialJournal = (entries: FinancialJournalEntry[]): void => {
+export const saveFinancialJournal = (entries: FinancialJournalEntry[]): boolean => {
   try {
-    localStorage.setItem(FINANCIAL_JOURNAL_KEY, JSON.stringify(entries));
+    const serialized = JSON.stringify(entries);
+    localStorage.setItem(FINANCIAL_JOURNAL_KEY, serialized);
+    const verification = localStorage.getItem(FINANCIAL_JOURNAL_KEY);
+    if (verification !== serialized) {
+      throw new Error('Financial journal storage verification check failed.');
+    }
+    return true;
   } catch (e) {
-    console.error('Failed to save financial journal', e);
+    console.error('CRITICAL: Failed to save or verify financial journal', e);
+    throw new Error(`Financial journal persistence failure: ${e instanceof Error ? e.message : String(e)}`);
   }
 };
+
 
 const archiveCommittedJournal = (entry: FinancialJournalEntry): void => {
   try {
@@ -1592,7 +1705,8 @@ export const recoverPendingFinancialTransactions = (): {
     const journal = getFinancialJournal();
     if (journal.length === 0) return report;
 
-    const allStudents = getAllStoredStudentsRaw();
+    const rawStudents = localStorage.getItem(STUDENTS_STORAGE_KEY);
+    const allStudents: Student[] = rawStudents ? JSON.parse(rawStudents) : [];
     const allPayments = getStoredPayments();
     let studentsModified = false;
     let paymentsModified = false;

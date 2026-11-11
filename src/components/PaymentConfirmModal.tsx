@@ -37,10 +37,21 @@ export const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Stable idempotency key per modal open session to guarantee zero duplicate submissions
+  // Stable idempotency key per active payment attempt session
   const [idempotencyKey, setIdempotencyKey] = useState<string>(() =>
     student ? `idemp_${student.id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}` : ''
   );
+
+  // Refresh idempotency key when student changes or modal re-opens
+  React.useEffect(() => {
+    if (student) {
+      setIdempotencyKey(`idemp_${student.id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
+      setErrorMessage(null);
+      setCustomAmount('');
+      setTransactionId('');
+      setNote('');
+    }
+  }, [student, isOpen]);
 
   if (!isOpen || !student) return null;
 
@@ -48,6 +59,7 @@ export const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
   const nextDate = advanceDateByOneMonth(student.nextFeeDueDate);
 
   const handleConfirm = () => {
+    if (isProcessing) return; // Prevent rapid double-click submissions
     setErrorMessage(null);
 
     // Validate fee amount
@@ -87,6 +99,8 @@ export const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
         }
 
         setIsProcessing(false);
+        // Refresh idempotency key for next payment on same or another student
+        setIdempotencyKey(`idemp_${student.id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
         onClose();
         if (onPaymentSuccess) {
           onPaymentSuccess(newRecord, updatedStudent);
@@ -98,6 +112,7 @@ export const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
       }
     }, 450);
   };
+
 
 
   return (
