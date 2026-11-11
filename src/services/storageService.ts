@@ -14,22 +14,14 @@ import {
 export { offsetDateString, getTodayDateString };
 
 const secureGetItem = (key: string): string | null => {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    return decryptStoragePayload(raw);
-  } catch {
-    return localStorage.getItem(key);
-  }
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+  return decryptStoragePayload(raw);
 };
 
 const secureSetItem = (key: string, value: string): void => {
-  try {
-    const encrypted = encryptStoragePayload(value);
-    localStorage.setItem(key, encrypted);
-  } catch {
-    localStorage.setItem(key, value);
-  }
+  const encrypted = encryptStoragePayload(value);
+  localStorage.setItem(key, encrypted);
 };
 
 const secureRandomHex = (length = 6): string => {
@@ -37,7 +29,7 @@ const secureRandomHex = (length = 6): string => {
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
     crypto.getRandomValues(array);
   } else {
-    for (let i = 0; i < length; i++) array[i] = Math.floor(Math.random() * 256);
+    throw new Error('Cryptographically secure random number generator (crypto.getRandomValues) is unavailable.');
   }
   return Array.from(array, b => b.toString(36)).join('').substring(0, length);
 };

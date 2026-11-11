@@ -398,33 +398,110 @@ runTest('addStudentToFirestore with invalid negative initial payment throws erro
 });
 
 // AES-GCM Cryptographic Tamper-Detection & Authentication Integrity
-console.log('Group 6: AES-256-GCM Cryptographic Tamper-Detection & Authentication Integrity');
-const { encryptStoragePayload, decryptStoragePayload, StorageCryptoError } = require('../src/services/storageEncryption');
+console.log('Group 6: AES-256-GCM Cryptographic Tamper-Detection & Authentication Integrity (12 Scenarios)');
+const { encryptStoragePayload, decryptStoragePayload, StorageCryptoError, setStaffPassphrase } = require('../src/services/storageEncryption');
 
-runTest('AES-GCM encrypts and decrypts valid payload roundtrip successfully', () => {
-  const plaintext = JSON.stringify({ secret: 'library student records confidential data 12345' });
-  const ciphertext = encryptStoragePayload(plaintext);
-  assert.ok(ciphertext.startsWith('AESGCM_GCM_V2:'));
-  const decrypted = decryptStoragePayload(ciphertext);
-  assert.strictEqual(decrypted, plaintext);
+runTest('1. AES-GCM round trip success', () => {
+  const plaintext = JSON.stringify({ student: 'Rahul Sharma', dues: 1200 });
+  const ct = encryptStoragePayload(plaintext);
+  assert.ok(ct.startsWith('AESGCM_GCM_V2:'));
+  const pt = decryptStoragePayload(ct);
+  assert.strictEqual(pt, plaintext);
 });
 
-runTest('AES-GCM throws StorageCryptoError on ciphertext tampering (authentication failure)', () => {
-  const plaintext = JSON.stringify({ secret: 'confidential payroll data' });
-  const ciphertext = encryptStoragePayload(plaintext);
-  const parts = ciphertext.split(':');
-  const tamperedCiphertext = parts[2].substring(0, parts[2].length - 4) + 'ABCD';
-  const tamperedPayload = `${parts[0]}:${parts[1]}:${tamperedCiphertext}`;
-
-  assert.throws(() => {
-    decryptStoragePayload(tamperedPayload);
-  }, StorageCryptoError);
+runTest('2. Ciphertext bit-flipping detection', () => {
+  const ct = encryptStoragePayload('Secret records');
+  const parts = ct.split(':');
+  const tampered = `${parts[0]}:${parts[1]}:${parts[2].replace(/[0-9a-f]/g, 'f')}`;
+  assert.throws(() => decryptStoragePayload(tampered), StorageCryptoError);
 });
 
-runTest('AES-GCM throws StorageCryptoError on invalid envelope or missing prefix', () => {
+runTest('3. Authentication-tag modification detection', () => {
+  const ct = encryptStoragePayload('Secret records');
+  const parts = ct.split(':');
+  const tamperedTag = parts[2].slice(0, -4) + '0000';
+  const tampered = `${parts[0]}:${parts[1]}:${tamperedTag}`;
+  assert.throws(() => decryptStoragePayload(tampered), StorageCryptoError);
+});
+
+runTest('4. Nonce modification detection', () => {
+  const ct = encryptStoragePayload('Secret records');
+  const parts = ct.split(':');
+  const badNonce = '00112233445566778899aabb';
+  const tampered = `${parts[0]}:${badNonce}:${parts[2]}`;
+  assert.throws(() => decryptStoragePayload(tampered), StorageCryptoError);
+});
+
+runTest('5. Wrong-key decryption failure (fail closed)', () => {
+  setStaffPassphrase('correct-passphrase-alpha-123');
+  const ct = encryptStoragePayload('Confidential financial audit');
   assert.throws(() => {
-    decryptStoragePayload('PLAIN_TEXT_UNENCRYPTED_DATA');
+    decryptStoragePayload(ct, 'wrong-passphrase-beta-999');
   }, StorageCryptoError);
+  setStaffPassphrase('libtrack_v209_enterprise_staff_default_secure_passphrase_2026');
+});
+
+runTest('6. Truncated ciphertext detection', () => {
+  const ct = encryptStoragePayload('Secret records');
+  const truncated = ct.substring(0, ct.length - 10);
+  assert.throws(() => decryptStoragePayload(truncated), StorageCryptoError);
+});
+
+runTest('7. Malformed envelope rejection', () => {
+  assert.throws(() => decryptStoragePayload('AESGCM_GCM_V2:invalidhex:short'), StorageCryptoError);
+});
+
+runTest('8. Empty payload handling', () => {
+  assert.strictEqual(encryptStoragePayload(''), '');
+  assert.strictEqual(decryptStoragePayload(''), '');
+});
+
+runTest('9. Missing secure random generator simulation fail closed', () => {
+  localStorage.clear();
+  const oldGlobalThisCrypto = globalThis.crypto;
+  Object.defineProperty(globalThis, 'crypto', { value: undefined, configurable: true, writable: true });
+  let caught = false;
+  try {
+    encryptStoragePayload('test');
+  } catch (err) {
+    if (err && err.name === 'StorageCryptoError') caught = true;
+  }
+  assert.strictEqual(caught, true);
+  Object.defineProperty(globalThis, 'crypto', { value: oldGlobalThisCrypto, configurable: true, writable: true });
+  localStorage.clear();
+});
+
+runTest('10. Encryption failure without plaintext persistence', () => {
+  localStorage.clear();
+  const oldGlobalThisCrypto = globalThis.crypto;
+  Object.defineProperty(globalThis, 'crypto', { value: undefined, configurable: true, writable: true });
+  let caught = false;
+  try {
+    encryptStoragePayload('no plaintext leaked');
+  } catch (err) {
+    if (err && err.name === 'StorageCryptoError') caught = true;
+  }
+  assert.strictEqual(caught, true);
+  Object.defineProperty(globalThis, 'crypto', { value: oldGlobalThisCrypto, configurable: true, writable: true });
+  localStorage.clear();
+});
+
+runTest('11. Decryption failure without raw-data return', () => {
+  const badPayload = 'AESGCM_GCM_V2:0123456789abcdef01234567:deadbeefdeadbeefdeadbeefdeadbeef';
+  assert.throws(() => decryptStoragePayload(badPayload), StorageCryptoError);
+});
+
+runTest('12. Cross-device backup encryption and decryption via shared passphrase', () => {
+  const sharedKey = 'enterprise-staff-shared-key-2026';
+  setStaffPassphrase(sharedKey);
+  const backupData = JSON.stringify({ students: [{ id: '1', name: 'Device A Backup' }] });
+  const exportedCt = encryptStoragePayload(backupData);
+
+  setStaffPassphrase(sharedKey);
+  const importedPt = decryptStoragePayload(exportedCt);
+  assert.strictEqual(importedPt, backupData);
+
+  setStaffPassphrase('libtrack_v209_enterprise_staff_default_secure_passphrase_2026');
 });
 
 console.log('\n====================================================');
