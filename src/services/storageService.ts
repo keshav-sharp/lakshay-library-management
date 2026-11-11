@@ -1055,6 +1055,23 @@ export interface SafeInitReport {
   diagnostics: string;
 }
 
+const RECOVERY_ONLY_MODE_KEY = 'libtrack_recovery_only_mode';
+export const isRecoveryOnlyMode = (): boolean => {
+  try {
+    return localStorage.getItem(RECOVERY_ONLY_MODE_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+export const setRecoveryOnlyMode = (active: boolean): void => {
+  try {
+    if (active) localStorage.setItem(RECOVERY_ONLY_MODE_KEY, '1');
+    else localStorage.removeItem(RECOVERY_ONLY_MODE_KEY);
+  } catch {
+    // Ignore
+  }
+};
+
 export const ensureSafeProductionInit = (): SafeInitReport => {
   try {
     if (typeof window === 'undefined' || !window.localStorage) {
@@ -1112,20 +1129,29 @@ export const ensureSafeProductionInit = (): SafeInitReport => {
 
     const quarantinedKeys: string[] = [];
 
-    // Never delete unparseable corrupted data: quarantine raw strings with timestamps
+    // Never delete unparseable corrupted data: quarantine raw strings with timestamps and verify readback
     if (studentsCorrupted && rawStudents !== null) {
       const qKey = `libtrack_quarantine_students_${Date.now()}`;
       localStorage.setItem(qKey, rawStudents);
+      if (localStorage.getItem(qKey) !== rawStudents) {
+        throw new Error('Quarantine write verification failed for student storage.');
+      }
       quarantinedKeys.push(qKey);
     }
     if (paymentsCorrupted && rawPayments !== null) {
       const qKey = `libtrack_quarantine_payments_${Date.now()}`;
       localStorage.setItem(qKey, rawPayments);
+      if (localStorage.getItem(qKey) !== rawPayments) {
+        throw new Error('Quarantine write verification failed for payment storage.');
+      }
       quarantinedKeys.push(qKey);
     }
     if (attendanceCorrupted && rawAttendance !== null) {
       const qKey = `libtrack_quarantine_attendance_${Date.now()}`;
       localStorage.setItem(qKey, rawAttendance);
+      if (localStorage.getItem(qKey) !== rawAttendance) {
+        throw new Error('Quarantine write verification failed for attendance storage.');
+      }
       quarantinedKeys.push(qKey);
     }
 
@@ -1135,28 +1161,19 @@ export const ensureSafeProductionInit = (): SafeInitReport => {
     const hasAttendanceData = parsedAttendance !== null && parsedAttendance.length > 0;
     const hasAnyExistingData = hasStudentData || hasPaymentData || hasAttendanceData || (rawStudents !== null && rawStudents.length > 2);
 
-    // State 1: Partial or Corrupted storage state. Preserve valid data, quarantine corrupt payloads, and prevent destructive reset.
+    // State 1: Partial or Corrupted storage state. Set recovery-only mode, quarantine corrupt payloads, and prevent unsafe operation.
     if (studentsCorrupted || paymentsCorrupted || attendanceCorrupted) {
+      setRecoveryOnlyMode(true);
       if (parsedStudents && !studentsCorrupted) {
         localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(parsedStudents));
-      } else if (rawStudents !== null) {
-        localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify([]));
       }
-
       if (parsedPayments && !paymentsCorrupted) {
         localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(parsedPayments));
-      } else if (rawPayments !== null) {
-        localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify({}));
       }
-
       if (parsedAttendance && !attendanceCorrupted) {
         localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify(parsedAttendance));
-      } else if (rawAttendance !== null) {
-        localStorage.setItem(DAILY_ATTENDANCE_STORAGE_KEY, JSON.stringify([]));
       }
 
-
-      localStorage.setItem(PRODUCTION_CLEAN_INIT_KEY, '1');
       return {
         state: 'CORRUPTED_STORAGE_QUARANTINED_PRESERVED',
         studentsCount: parsedStudents?.length || 0,
@@ -1164,7 +1181,7 @@ export const ensureSafeProductionInit = (): SafeInitReport => {
         attendanceCount: parsedAttendance?.length || 0,
         backupPreserved: false,
         quarantinedKeys,
-        diagnostics: 'Corrupted storage payload quarantined to preserve raw bytes; valid subset recovered.',
+        diagnostics: 'CRITICAL: Corrupted storage detected and quarantined. Application placed in persistent recovery-only mode to prevent silent data loss.',
       };
     }
 
@@ -1457,6 +1474,10 @@ export const addStudentToFirestore = (
     note?: string;
   }
 ): Student => {
+  if (isRecoveryOnlyMode()) {
+    throw new Error('CRITICAL: Admissions are blocked while application is in recovery-only mode due to unresolved storage corruption.');
+  }
+
   const nowISO = new Date().toISOString();
   const allStudentsRaw = getAllStoredStudentsRaw();
   const newStudent: Student = {
@@ -1800,6 +1821,10 @@ export const markStudentPaidInFirestore = (
     idempotencyKey?: string;
   }
 ): { updatedStudent: Student; newRecord: PaymentRecord; wasIdempotentReplay?: boolean } => {
+  if (isRecoveryOnlyMode()) {
+    throw new Error('CRITICAL: Payment collection is blocked while application is in recovery-only mode due to unresolved storage corruption.');
+  }
+
   // 1. Strict Monetary Validation
   const validation = validateMonetaryAmount(amount);
   if (!validation.valid) {
