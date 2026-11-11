@@ -1764,6 +1764,7 @@ const archiveCommittedJournal = (entry: FinancialJournalEntry): void => {
     setRecoveryOnlyMode(true);
     throw error;
   }
+};
 
 /**
  * Crash-recovery protocol: Reconciles any interrupted payments.
