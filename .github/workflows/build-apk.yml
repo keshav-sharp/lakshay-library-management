@@ -6,7 +6,8 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
-
+permissions:
+  contents: read
 jobs:
   build-apk:
     name: Validate and Build Lakshay Library APK
