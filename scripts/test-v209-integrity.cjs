@@ -276,7 +276,7 @@ runTest('Financial journal write failure is injected and surfaced', () => {
 
 runTest('Recovery fails closed when storage reads are unavailable', () => {
   localStorage.clear();
-  localStorage.failOnGetKey = FINANCIAL_JOURNAL_KEY;
+  localStorage.failOnGetKey = 'libtrack_recovery_only_mode';
   assert.strictEqual(isRecoveryOnlyMode(), true);
   localStorage.failOnGetKey = null;
 });
