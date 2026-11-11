@@ -1073,7 +1073,7 @@ export const setRecoveryOnlyMode = (active: boolean): void => {
   }
 };
 
-const assertProductionWritesAllowed = (): void => {
+export const assertProductionWritesAllowed = (): void => {
   if (isRecoveryOnlyMode()) {
     throw new Error('CRITICAL: Data changes are blocked while LibTrack is in recovery-only mode. Resolve and verify the quarantined storage before resuming writes.');
   }
