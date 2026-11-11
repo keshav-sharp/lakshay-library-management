@@ -1674,17 +1674,27 @@ export interface FinancialJournalEntry {
 }
 
 export const getFinancialJournal = (): FinancialJournalEntry[] => {
+  const raw = localStorage.getItem(FINANCIAL_JOURNAL_KEY);
+  if (raw === null || raw === '') return [];
+  let parsed: unknown;
   try {
-    const raw = localStorage.getItem(FINANCIAL_JOURNAL_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    parsed = JSON.parse(raw);
   } catch {
-    return [];
+    setRecoveryOnlyMode(true);
+    throw new Error('Financial journal is malformed. Recovery-only mode enabled; journal bytes have been preserved.');
   }
-};
-
-export const saveFinancialJournal = (entries: FinancialJournalEntry[]): boolean => {
+  if (!Array.isArray(parsed) || parsed.some((entry) =>
+    !entry || typeof entry !== 'object' ||
+    typeof entry.journalId !== 'string' ||
+    typeof entry.studentId !== 'string' ||
+    typeof entry.paymentId !== 'string' ||
+    !['PREPARED', 'PAYMENT_PERSISTED', 'COMMITTED'].includes(entry.state)
+  )) {
+    setRecoveryOnlyMode(true);
+    throw new Error('Financial journal schema is invalid. Recovery-only mode enabled; journal bytes have been preserved.');
+  }
+  return parsed as FinancialJournalEntry[];
+}; = (entries: FinancialJournalEntry[]): boolean => {
   try {
     const serialized = JSON.stringify(entries);
     localStorage.setItem(FINANCIAL_JOURNAL_KEY, serialized);
@@ -1701,16 +1711,20 @@ export const saveFinancialJournal = (entries: FinancialJournalEntry[]): boolean 
 
 
 const archiveCommittedJournal = (entry: FinancialJournalEntry): void => {
-  try {
-    const rawAudit = localStorage.getItem(FINANCIAL_AUDIT_TRAIL_KEY);
-    const audit: FinancialJournalEntry[] = rawAudit ? JSON.parse(rawAudit) : [];
-    // Keep last 100 committed audit entries
-    const updated = [entry, ...audit.filter((a) => a.journalId !== entry.journalId)].slice(0, 100);
-    localStorage.setItem(FINANCIAL_AUDIT_TRAIL_KEY, JSON.stringify(updated));
-  } catch {
-    // Ignore
+  const rawAudit = localStorage.getItem(FINANCIAL_AUDIT_TRAIL_KEY);
+  let audit: FinancialJournalEntry[] = [];
+  if (rawAudit !== null) {
+    const parsed = JSON.parse(rawAudit);
+    if (!Array.isArray(parsed)) throw new Error('Financial audit trail is malformed.');
+    audit = parsed;
   }
-};
+  const updated = [entry, ...audit.filter((a) => a.journalId !== entry.journalId)].slice(0, 100);
+  const serialized = JSON.stringify(updated);
+  localStorage.setItem(FINANCIAL_AUDIT_TRAIL_KEY, serialized);
+  if (localStorage.getItem(FINANCIAL_AUDIT_TRAIL_KEY) !== serialized) {
+    throw new Error('Financial audit trail persistence verification failed.');
+  }
+}
 
 /**
  * Crash-recovery protocol: Reconciles any interrupted payments.
@@ -1727,75 +1741,105 @@ export const recoverPendingFinancialTransactions = (): {
     if (journal.length === 0) return report;
 
     const rawStudents = localStorage.getItem(STUDENTS_STORAGE_KEY);
-    const allStudents: Student[] = rawStudents ? JSON.parse(rawStudents) : [];
-    const allPayments = getStoredPayments();
-    let studentsModified = false;
-    let paymentsModified = false;
+    if (rawStudents === null) throw new Error('Student registry is missing while financial journal has pending entries.');
+    const parsedStudents: unknown = JSON.parse(rawStudents);
+    if (!Array.isArray(parsedStudents)) throw new Error('Student registry is invalid during financial recovery.');
+    const allStudents = parsedStudents as Student[];
+    const rawPayments = localStorage.getItem(PAYMENTS_STORAGE_KEY);
+    if (rawPayments === null) throw new Error('Payment ledger is missing while financial journal has pending entries.');
+    const parsedPayments: unknown = JSON.parse(rawPayments);
+    if (!parsedPayments || typeof parsedPayments !== 'object' || Array.isArray(parsedPayments)) {
+      throw new Error('Payment ledger is invalid during financial recovery.');
+    }
+    const allPayments = parsedPayments as Record<string, PaymentRecord[]>;
     const remainingJournal: FinancialJournalEntry[] = [];
+    const auditEntries: FinancialJournalEntry[] = [];
+    let studentsModified = false;
 
     for (const entry of journal) {
+      const studentIndex = allStudents.findIndex((student) => student && student.id === entry.studentId);
+      const studentPayments = allPayments[entry.studentId];
+      if (studentPayments !== undefined && !Array.isArray(studentPayments)) {
+        throw new Error(`Payment records are invalid for student ${entry.studentId}.`);
+      }
+      const paymentExists = (studentPayments || []).some((payment) =>
+        payment && (payment.id === entry.paymentId ||
+          (payment.idempotencyKey && payment.idempotencyKey === entry.idempotencyKey))
+      );
+
       if (entry.state === 'COMMITTED') {
-        archiveCommittedJournal(entry);
+        auditEntries.push(entry);
         continue;
       }
 
-      const studentIndex = allStudents.findIndex((s) => s.id === entry.studentId);
-      const studentPayments = allPayments[entry.studentId] || [];
-      const paymentExists = studentPayments.some(
-        (p) => p.id === entry.paymentId || (p.idempotencyKey && p.idempotencyKey === entry.idempotencyKey)
-      );
-
       if (entry.state === 'PAYMENT_PERSISTED') {
-        // Payment was written to disk, but crash occurred before student due date was saved
-        if (studentIndex >= 0) {
-          const student = allStudents[studentIndex];
-          if (student.nextFeeDueDate === entry.oldDueDate) {
-            allStudents[studentIndex] = {
-              ...student,
-              nextFeeDueDate: entry.newDueDate,
-              updatedAt: new Date().toISOString(),
-            };
-            studentsModified = true;
-            report.recoveredCount++;
-            report.details.push(
-              `Recovered due date advancement for student ${student.name} (${student.id}) from ${entry.oldDueDate} to ${entry.newDueDate}`
-            );
-          }
+        if (!paymentExists) {
+          remainingJournal.push(entry);
+          throw new Error(`Payment record ${entry.paymentId} is not present; refusing to advance due date or prune journal.`);
         }
-        archiveCommittedJournal(entry);
-      } else if (entry.state === 'PREPARED') {
-        // Crash occurred before payment was written
-        if (paymentExists) {
-          if (studentIndex >= 0 && allStudents[studentIndex].nextFeeDueDate === entry.oldDueDate) {
-            allStudents[studentIndex] = {
-              ...allStudents[studentIndex],
-              nextFeeDueDate: entry.newDueDate,
-              updatedAt: new Date().toISOString(),
-            };
-            studentsModified = true;
-          }
-          report.recoveredCount++;
-          archiveCommittedJournal(entry);
-        } else {
-          // Payment record never wrote; cancel entry cleanly
-          report.cancelledCount++;
-          report.details.push(`Cancelled unpersisted transaction ${entry.journalId} for student ${entry.studentId}`);
+        if (studentIndex < 0) {
+          remainingJournal.push(entry);
+          throw new Error(`Student ${entry.studentId} is missing; refusing to archive financial transaction.`);
         }
+        const student = allStudents[studentIndex];
+        if (student.nextFeeDueDate === entry.oldDueDate) {
+          allStudents[studentIndex] = { ...student, nextFeeDueDate: entry.newDueDate, updatedAt: new Date().toISOString() };
+          studentsModified = true;
+        } else if (student.nextFeeDueDate !== entry.newDueDate) {
+          remainingJournal.push(entry);
+          throw new Error(`Due date mismatch for ${entry.studentId}; expected ${entry.oldDueDate} or ${entry.newDueDate}, found ${student.nextFeeDueDate}.`);
+        }
+        auditEntries.push(entry);
+        report.recoveredCount++;
+        report.details.push(`Verified payment ${entry.paymentId} and reconciled student ${entry.studentId}.`);
+        continue;
       }
+
+      if (entry.state === 'PREPARED') {
+        if (!paymentExists) {
+          report.cancelledCount++;
+          report.details.push(`Cancelled prepared transaction ${entry.journalId}; no matching payment record exists.`);
+          continue;
+        }
+        if (studentIndex < 0) {
+          remainingJournal.push(entry);
+          throw new Error(`Student ${entry.studentId} is missing for a persisted payment; transaction retained for manual recovery.`);
+        }
+        const student = allStudents[studentIndex];
+        if (student.nextFeeDueDate === entry.oldDueDate) {
+          allStudents[studentIndex] = { ...student, nextFeeDueDate: entry.newDueDate, updatedAt: new Date().toISOString() };
+          studentsModified = true;
+        } else if (student.nextFeeDueDate !== entry.newDueDate) {
+          remainingJournal.push(entry);
+          throw new Error(`Due date mismatch for prepared transaction ${entry.journalId}; retained for manual recovery.`);
+        }
+        auditEntries.push({ ...entry, state: 'COMMITTED' });
+        report.recoveredCount++;
+        continue;
+      }
+
+      remainingJournal.push(entry);
+      throw new Error(`Unsupported financial journal state for ${entry.journalId}.`);
     }
 
     if (studentsModified) {
-      localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(allStudents));
-    }
-    if (paymentsModified) {
-      localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(allPayments));
+      const serializedStudents = JSON.stringify(allStudents);
+      localStorage.setItem(STUDENTS_STORAGE_KEY, serializedStudents);
+      if (localStorage.getItem(STUDENTS_STORAGE_KEY) !== serializedStudents) {
+        throw new Error('Student due-date persistence verification failed during recovery.');
+      }
     }
 
+    // Preserve every unresolved entry. Do not prune until all reconciliation and audit writes verify.
+    for (const entry of auditEntries) archiveCommittedJournal(entry);
     saveFinancialJournal(remainingJournal);
+    return report;
   } catch (err) {
-    console.error('Error during financial transaction recovery', err);
+    setRecoveryOnlyMode(true);
+    report.details.push(`RECOVERY SUSPENDED: ${err instanceof Error ? err.message : String(err)}`);
+    console.error('Financial recovery suspended; journal retained and recovery-only mode enabled.', err);
+    return report;
   }
-  return report;
 };
 
 /**
