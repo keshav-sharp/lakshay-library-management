@@ -19,17 +19,20 @@ jobs:
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
 
       - name: Set up Java JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Reconcile and Validate Dependency Lockfile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
       - name: Install Locked Node Dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: TypeScript Validation
         run: npm run lint
