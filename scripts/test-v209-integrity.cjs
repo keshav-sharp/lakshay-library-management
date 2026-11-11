@@ -16,11 +16,15 @@ const assert = require('assert');
 class MockLocalStorage {
   constructor() {
     this.store = {};
+    this.failOnSetKey = null;
+    this.failOnGetKey = null;
   }
   getItem(key) {
+    if (this.failOnGetKey === key) throw new Error('Injected getItem failure');
     return Object.prototype.hasOwnProperty.call(this.store, key) ? this.store[key] : null;
   }
   setItem(key, val) {
+    if (this.failOnSetKey === key) throw new Error('Injected setItem failure');
     this.store[key] = String(val);
   }
   removeItem(key) {
@@ -28,6 +32,8 @@ class MockLocalStorage {
   }
   clear() {
     this.store = {};
+    this.failOnSetKey = null;
+    this.failOnGetKey = null;
   }
   get length() {
     return Object.keys(this.store).length;
@@ -51,6 +57,8 @@ const {
   recoverPendingFinancialTransactions,
   getStoredPayments,
   getAllStoredStudentsRaw,
+  isRecoveryOnlyMode,
+  FINANCIAL_JOURNAL_KEY,
 } = require('../src/services/storageService');
 
 let testsPassed = 0;
@@ -222,6 +230,49 @@ runTest('Crash recovery cancels prepared entry if payment record is missing', ()
   const report = recoverPendingFinancialTransactions();
   assert.strictEqual(report.cancelledCount, 1);
   assert.strictEqual(getFinancialJournal().length, 0);
+});
+
+runTest('PAYMENT_PERSISTED without matching payment is retained and enters recovery-only mode', () => {
+  localStorage.clear();
+  const student = { id: 'std_no_payment', name: 'Missing Persisted Payment', nextFeeDueDate: '2026-11-01', status: 'active' };
+  localStorage.setItem('libtrack_firestore_students', JSON.stringify([student]));
+  localStorage.setItem('libtrack_firestore_payments', JSON.stringify({}));
+  const entry = {
+    journalId: 'jnl_no_payment', idempotencyKey: 'idem_no_payment',
+    paymentId: 'pay_not_found', receiptNumber: 'REC-NOT-FOUND',
+    studentId: 'std_no_payment', studentName: 'Missing Persisted Payment',
+    oldDueDate: '2026-11-01', newDueDate: '2026-12-01',
+    amount: 1000, amountPaise: 100000, paymentMode: 'UPI',
+    timestampISO: new Date().toISOString(), state: 'PAYMENT_PERSISTED',
+  };
+  saveFinancialJournal([entry]);
+  const report = recoverPendingFinancialTransactions();
+  assert.strictEqual(report.recoveredCount, 0);
+  assert.strictEqual(getAllStoredStudentsRaw()[0].nextFeeDueDate, '2026-11-01');
+  assert.strictEqual(getFinancialJournal().length, 1);
+  assert.strictEqual(isRecoveryOnlyMode(), true);
+});
+
+runTest('Malformed financial journal is preserved and blocks recovery', () => {
+  localStorage.clear();
+  localStorage.setItem(FINANCIAL_JOURNAL_KEY, '{broken-json');
+  assert.throws(() => getFinancialJournal(), /malformed/);
+  assert.strictEqual(localStorage.getItem(FINANCIAL_JOURNAL_KEY), '{broken-json');
+  assert.strictEqual(isRecoveryOnlyMode(), true);
+});
+
+runTest('Financial journal write failure is injected and surfaced', () => {
+  localStorage.clear();
+  localStorage.failOnSetKey = FINANCIAL_JOURNAL_KEY;
+  assert.throws(() => saveFinancialJournal([]), /persistence failure/);
+  localStorage.failOnSetKey = null;
+});
+
+runTest('Recovery fails closed when storage reads are unavailable', () => {
+  localStorage.clear();
+  localStorage.failOnGetKey = FINANCIAL_JOURNAL_KEY;
+  assert.strictEqual(isRecoveryOnlyMode(), true);
+  localStorage.failOnGetKey = null;
 });
 
 runTest('Repeated recovery execution is safe and idempotent', () => {
