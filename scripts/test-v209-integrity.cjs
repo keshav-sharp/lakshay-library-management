@@ -397,6 +397,36 @@ runTest('addStudentToFirestore with invalid negative initial payment throws erro
   }, /Invalid initial admission payment amount/);
 });
 
+// AES-GCM Cryptographic Tamper-Detection & Authentication Integrity
+console.log('Group 6: AES-256-GCM Cryptographic Tamper-Detection & Authentication Integrity');
+const { encryptStoragePayload, decryptStoragePayload, StorageCryptoError } = require('../src/services/storageEncryption');
+
+runTest('AES-GCM encrypts and decrypts valid payload roundtrip successfully', () => {
+  const plaintext = JSON.stringify({ secret: 'library student records confidential data 12345' });
+  const ciphertext = encryptStoragePayload(plaintext);
+  assert.ok(ciphertext.startsWith('AESGCM_GCM_V2:'));
+  const decrypted = decryptStoragePayload(ciphertext);
+  assert.strictEqual(decrypted, plaintext);
+});
+
+runTest('AES-GCM throws StorageCryptoError on ciphertext tampering (authentication failure)', () => {
+  const plaintext = JSON.stringify({ secret: 'confidential payroll data' });
+  const ciphertext = encryptStoragePayload(plaintext);
+  const parts = ciphertext.split(':');
+  const tamperedCiphertext = parts[2].substring(0, parts[2].length - 4) + 'ABCD';
+  const tamperedPayload = `${parts[0]}:${parts[1]}:${tamperedCiphertext}`;
+
+  assert.throws(() => {
+    decryptStoragePayload(tamperedPayload);
+  }, StorageCryptoError);
+});
+
+runTest('AES-GCM throws StorageCryptoError on invalid envelope or missing prefix', () => {
+  assert.throws(() => {
+    decryptStoragePayload('PLAIN_TEXT_UNENCRYPTED_DATA');
+  }, StorageCryptoError);
+});
+
 console.log('\n====================================================');
 console.log(`Results: ${testsPassed} passed, ${testsFailed} failed.`);
 console.log('====================================================');
