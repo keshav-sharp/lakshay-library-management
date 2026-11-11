@@ -58,6 +58,7 @@ const {
   getStoredPayments,
   getAllStoredStudentsRaw,
   isRecoveryOnlyMode,
+  setRecoveryOnlyMode,
   FINANCIAL_JOURNAL_KEY,
 } = require('../src/services/storageService');
 
@@ -251,6 +252,7 @@ runTest('PAYMENT_PERSISTED without matching payment is retained and enters recov
   assert.strictEqual(getAllStoredStudentsRaw()[0].nextFeeDueDate, '2026-11-01');
   assert.strictEqual(getFinancialJournal().length, 1);
   assert.strictEqual(isRecoveryOnlyMode(), true);
+  setRecoveryOnlyMode(false);
 });
 
 runTest('Malformed financial journal is preserved and blocks recovery', () => {
@@ -259,6 +261,7 @@ runTest('Malformed financial journal is preserved and blocks recovery', () => {
   assert.throws(() => getFinancialJournal(), /malformed/);
   assert.strictEqual(localStorage.getItem(FINANCIAL_JOURNAL_KEY), '{broken-json');
   assert.strictEqual(isRecoveryOnlyMode(), true);
+  setRecoveryOnlyMode(false);
 });
 
 runTest('Financial journal write failure is injected and surfaced', () => {
