@@ -61,8 +61,8 @@ const {
   setRecoveryOnlyMode,
   FINANCIAL_JOURNAL_KEY,
 } = require('../src/services/storageService');
-const { addCustomShift } = require('../src/services/shiftService');
-const { addCustomSeat } = require('../src/services/seatService');
+const { addCustomShift, getStoredShifts } = require('../src/services/shiftService');
+const { addCustomSeat, getStoredSeats } = require('../src/services/seatService');
 
 let testsPassed = 0;
 let testsFailed = 0;
@@ -286,6 +286,20 @@ runTest('Seat, shift, and student attendance mutations are blocked in recovery-o
   setRecoveryOnlyMode(true);
   assert.throws(() => addCustomShift({ label: 'Test Shift', timings: '08:00 AM - 12:00 PM', defaultFee: 500 }), /recovery-only mode/);
   assert.throws(() => addCustomSeat('Z-01'), /recovery-only mode/);
+  setRecoveryOnlyMode(false);
+});
+
+runTest('Corrupt seat and shift JSON is preserved and enables recovery-only mode', () => {
+  localStorage.clear();
+  localStorage.setItem('lakshay_app_shifts', '{bad-shifts');
+  localStorage.setItem('lakshay_app_seats', '{bad-seats');
+  getStoredShifts();
+  assert.strictEqual(localStorage.getItem('lakshay_app_shifts'), '{bad-shifts');
+  assert.strictEqual(isRecoveryOnlyMode(), true);
+  setRecoveryOnlyMode(false);
+  getStoredSeats();
+  assert.strictEqual(localStorage.getItem('lakshay_app_seats'), '{bad-seats');
+  assert.strictEqual(isRecoveryOnlyMode(), true);
   setRecoveryOnlyMode(false);
 });
 
