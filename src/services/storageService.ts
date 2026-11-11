@@ -1,4 +1,5 @@
 import { Student, PaymentRecord, DailyAttendanceRecord } from '../types/student';
+import { encryptStoragePayload, decryptStoragePayload } from './storageEncryption';
 import { 
   INITIAL_STUDENTS, 
   INITIAL_PAYMENT_HISTORY, 
@@ -11,6 +12,35 @@ import {
 } from '../data/mockStudents';
 
 export { offsetDateString, getTodayDateString };
+
+const secureGetItem = (key: string): string | null => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return decryptStoragePayload(raw);
+  } catch {
+    return localStorage.getItem(key);
+  }
+};
+
+const secureSetItem = (key: string, value: string): void => {
+  try {
+    const encrypted = encryptStoragePayload(value);
+    localStorage.setItem(key, encrypted);
+  } catch {
+    localStorage.setItem(key, value);
+  }
+};
+
+const secureRandomHex = (length = 6): string => {
+  const array = new Uint8Array(length);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(array);
+  } else {
+    for (let i = 0; i < length; i++) array[i] = Math.floor(Math.random() * 256);
+  }
+  return Array.from(array, b => b.toString(36)).join('').substring(0, length);
+};
 
 const STUDENTS_STORAGE_KEY = 'libtrack_firestore_students';
 const PAYMENTS_STORAGE_KEY = 'libtrack_firestore_payments';
